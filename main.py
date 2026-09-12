@@ -1,7 +1,9 @@
 import asyncio
 import ipaddress
 import json
+import math
 import os
+import random
 import socket
 import sys
 from datetime import datetime, timedelta, timezone
@@ -102,23 +104,60 @@ COURT_WIDTH = CANVAS_WIDTH * 2
 
 BALL_SIZE = 15
 PADDLE_WIDTH = 15
-PADDLE_HEIGHT = 100
+PADDLE_HEIGHT = 100         # BASE height -- screaming temporarily grows a paddle above this
 PADDLE_SPEED = 8
 PADDLE_MARGIN = 30          # distance of each paddle from its outer wall
 
 PADDLE1_X = PADDLE_MARGIN
 PADDLE2_X = COURT_WIDTH - PADDLE_MARGIN - PADDLE_WIDTH
 
+# ==========================================
+# SCREAM MECHANIC
+#
+# The phone controller listens to the mic and reports a loudness "level"
+# (0.0 quiet -> 1.0 screaming) several times a second. Each paddle tracks
+# its own scream "charge" in game_state: incoming levels can only push the
+# charge UP instantly (so a scream registers right away), while step_physics
+# decays it back down every tick when the player isn't screaming -- like a
+# peak-hold VU meter. Paddle height is derived from that charge each tick,
+# maxing out at PADDLE_SCREAM_MAX_BONUS above the base height.
+# ==========================================
+PADDLE_SCREAM_MAX_BONUS = 0.5     # +50% height at full charge -> 1.5x base, as requested
+SCREAM_DECAY_PER_TICK = 0.985     # charge *= this every tick; ~2-3s to fade back to normal
+
+# ==========================================
+# POWERUPS
+#
+# A random powerup spawns once every POWERUP_MIN_HITS-POWERUP_MAX_HITS
+# paddle hits (re-rolled fresh after each spawn), sitting in the middle of
+# the court until the BALL touches it. It then speeds the ball up or slows
+# it down and disappears. Speed is clamped so repeated powerups can't spiral
+# the ball into being unhittable (too fast) or boring (too slow).
+# ==========================================
+POWERUP_MIN_HITS = 10
+POWERUP_MAX_HITS = 20
+POWERUP_SIZE = 24
+POWERUP_SPEED_MULT = {"fast": 1.35, "slow": 0.72}
+BALL_MIN_SPEED = 4.0
+BALL_MAX_SPEED = 16.0
+
 game_state = {
     "court": {"width": COURT_WIDTH, "height": CANVAS_HEIGHT, "screen_width": CANVAS_WIDTH},
     "ball": {"x": COURT_WIDTH / 2, "y": CANVAS_HEIGHT / 2, "size": BALL_SIZE, "vx": 6, "vy": 5},
     "paddles": {
-        "p1": {"x": PADDLE1_X, "y": CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2},
-        "p2": {"x": PADDLE2_X, "y": CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2},
+        "p1": {"x": PADDLE1_X, "y": CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2, "height": PADDLE_HEIGHT, "scream": 0.0},
+        "p2": {"x": PADDLE2_X, "y": CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2, "height": PADDLE_HEIGHT, "scream": 0.0},
     },
-    "paddle_size": {"width": PADDLE_WIDTH, "height": PADDLE_HEIGHT},
+    "paddle_size": {"width": PADDLE_WIDTH},
     "score": {"p1": 0, "p2": 0},
+    "powerup": None,  # None, or {"x", "y", "size", "type": "fast" | "slow"}
 }
+
+# Paddle-hit counter driving powerup spawns -- re-rolled every time a
+# powerup is picked up (or spawned). Not part of game_state since the client
+# never needs to know the raw count, only whether a powerup is on the court.
+_hits_since_powerup = 0
+_next_powerup_at = random.randint(POWERUP_MIN_HITS, POWERUP_MAX_HITS)
 
 # Reused every broadcast instead of allocating a fresh dict each tick.
 # Coordinates are rounded to whole pixels for the wire -- the client only
@@ -127,9 +166,13 @@ game_state = {
 _wire = {
     "court": game_state["court"],
     "ball": {"x": 0, "y": 0, "size": BALL_SIZE},
-    "paddles": {"p1": {"x": PADDLE1_X, "y": 0}, "p2": {"x": PADDLE2_X, "y": 0}},
+    "paddles": {
+        "p1": {"x": PADDLE1_X, "y": 0, "height": PADDLE_HEIGHT},
+        "p2": {"x": PADDLE2_X, "y": 0, "height": PADDLE_HEIGHT},
+    },
     "paddle_size": game_state["paddle_size"],
     "score": game_state["score"],
+    "powerup": None,
 }
 
 
@@ -296,12 +339,48 @@ def reset_ball(serve_towards: int = 1):
     game_state["ball"]["y"] = CANVAS_HEIGHT / 2
     game_state["ball"]["vx"] = -6 if serve_towards == 1 else 6
     game_state["ball"]["vy"] = 5 if game_state["ball"]["vy"] >= 0 else -5
+    game_state["powerup"] = None
+
+
+def _spawn_powerup():
+    """Drop a new powerup somewhere in the middle third of the court, away
+    from either paddle, with a 50/50 fast-or-slow effect."""
+    margin = COURT_WIDTH * 0.15  # keep it out of the paddles' immediate reach
+    x = random.uniform(PADDLE1_X + margin, PADDLE2_X - margin)
+    y = random.uniform(0, CANVAS_HEIGHT - POWERUP_SIZE)
+    kind = random.choice(["fast", "slow"])
+    game_state["powerup"] = {"x": x, "y": y, "size": POWERUP_SIZE, "type": kind}
+
+
+def _register_paddle_hit():
+    """Call once per successful paddle bounce. Spawns a powerup once the
+    random 10-20 hit threshold is reached (only if none is already out)."""
+    global _hits_since_powerup, _next_powerup_at
+    _hits_since_powerup += 1
+    if game_state["powerup"] is None and _hits_since_powerup >= _next_powerup_at:
+        _spawn_powerup()
+        _hits_since_powerup = 0
+        _next_powerup_at = random.randint(POWERUP_MIN_HITS, POWERUP_MAX_HITS)
 
 
 def step_physics():
     ball = game_state["ball"]
     p1 = game_state["paddles"]["p1"]
     p2 = game_state["paddles"]["p2"]
+
+    # ---- Scream charge decay -> paddle height ----
+    # Charge only ever gets pushed UP by an incoming "scream" websocket
+    # message (see websocket_endpoint); here it just fades back down, so a
+    # paddle grows the instant you scream and shrinks back over a couple
+    # seconds of quiet. Height is derived fresh from charge every tick.
+    for paddle in (p1, p2):
+        paddle["scream"] *= SCREAM_DECAY_PER_TICK
+        if paddle["scream"] < 0.001:
+            paddle["scream"] = 0.0
+        paddle["height"] = PADDLE_HEIGHT * (1 + PADDLE_SCREAM_MAX_BONUS * paddle["scream"])
+        # A paddle that grew while already near the bottom edge shouldn't
+        # be allowed to poke out past the court boundary.
+        paddle["y"] = min(paddle["y"], CANVAS_HEIGHT - paddle["height"])
 
     # Move ball
     ball["x"] += ball["vx"]
@@ -321,10 +400,11 @@ def step_physics():
         and ball["x"] <= p1["x"] + PADDLE_WIDTH
         and ball["x"] + BALL_SIZE >= p1["x"]
         and ball["y"] + BALL_SIZE >= p1["y"]
-        and ball["y"] <= p1["y"] + PADDLE_HEIGHT
+        and ball["y"] <= p1["y"] + p1["height"]
     ):
         ball["x"] = p1["x"] + PADDLE_WIDTH
         ball["vx"] *= -1
+        _register_paddle_hit()
 
     # Paddle 2 collision (right wall of the court)
     if (
@@ -332,10 +412,27 @@ def step_physics():
         and ball["x"] + BALL_SIZE >= p2["x"]
         and ball["x"] <= p2["x"] + PADDLE_WIDTH
         and ball["y"] + BALL_SIZE >= p2["y"]
-        and ball["y"] <= p2["y"] + PADDLE_HEIGHT
+        and ball["y"] <= p2["y"] + p2["height"]
     ):
         ball["x"] = p2["x"] - BALL_SIZE
         ball["vx"] *= -1
+        _register_paddle_hit()
+
+    # ---- Powerup pickup: ball touches it -> speeds it up or slows it down ----
+    powerup = game_state["powerup"]
+    if powerup is not None:
+        closest_x = max(powerup["x"], min(ball["x"] + BALL_SIZE / 2, powerup["x"] + powerup["size"]))
+        closest_y = max(powerup["y"], min(ball["y"] + BALL_SIZE / 2, powerup["y"] + powerup["size"]))
+        dx = (ball["x"] + BALL_SIZE / 2) - closest_x
+        dy = (ball["y"] + BALL_SIZE / 2) - closest_y
+        if dx * dx + dy * dy <= (BALL_SIZE / 2) ** 2:
+            mult = POWERUP_SPEED_MULT[powerup["type"]]
+            speed = math.hypot(ball["vx"], ball["vy"])
+            new_speed = max(BALL_MIN_SPEED, min(BALL_MAX_SPEED, speed * mult))
+            scale = new_speed / speed if speed else 1.0
+            ball["vx"] *= scale
+            ball["vy"] *= scale
+            game_state["powerup"] = None
 
     # Scoring -- ball passed a paddle and left the court entirely
     if ball["x"] < 0:
@@ -351,13 +448,26 @@ def build_wire_message() -> str:
     ball = game_state["ball"]
     p1 = game_state["paddles"]["p1"]
     p2 = game_state["paddles"]["p2"]
+    powerup = game_state["powerup"]
 
     wb = _wire["ball"]
     wb["x"] = int(ball["x"])
     wb["y"] = int(ball["y"])
 
     _wire["paddles"]["p1"]["y"] = int(p1["y"])
+    _wire["paddles"]["p1"]["height"] = int(p1["height"])
     _wire["paddles"]["p2"]["y"] = int(p2["y"])
+    _wire["paddles"]["p2"]["height"] = int(p2["height"])
+
+    if powerup is None:
+        _wire["powerup"] = None
+    else:
+        _wire["powerup"] = {
+            "x": int(powerup["x"]),
+            "y": int(powerup["y"]),
+            "size": powerup["size"],
+            "type": powerup["type"],
+        }
 
     return dumps(_wire)
 
@@ -425,6 +535,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     commands, and the payload itself says which player it's driving:
         {"action": "up" | "down", "player": 1 | 2}
         {"action": "set", "value": 0.0-1.0, "player": 1 | 2}
+        {"action": "scream", "level": 0.0-1.0, "player": 1 | 2}
     "up"/"down" nudge the paddle by a fixed step each message -- used by
     the keyboard and the button controller, where holding the key/button
     resends the same action repeatedly.
@@ -432,6 +543,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     its track, 1.0 = bottom) -- used by the phone's tilt controls, where
     the tilt angle itself already represents "how far up/down", not a
     direction to nudge in.
+    "scream" reports the controller's current mic loudness; it can only
+    push that paddle's scream charge UP immediately (step_physics decays it
+    back down every tick), which is what grows the paddle while you're
+    screaming and shrinks it back once you stop.
     This way a laptop's own keyboard AND an optional phone controller can
     both drive the same paddle without the server needing to special-case
     where the message came from.
@@ -447,11 +562,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
             action = msg.get("action")
             player = msg.get("player")
-            if action not in ("up", "down", "set") or player not in (1, 2):
+            if action not in ("up", "down", "set", "scream") or player not in (1, 2):
                 continue
 
             paddle = game_state["paddles"]["p1"] if player == 1 else game_state["paddles"]["p2"]
-            max_y = CANVAS_HEIGHT - PADDLE_HEIGHT
+            # Height can currently be inflated by screaming, so the movement
+            # clamp has to use the paddle's CURRENT height, not the base one.
+            max_y = CANVAS_HEIGHT - paddle["height"]
 
             if action == "up":
                 paddle["y"] = max(0, paddle["y"] - PADDLE_SPEED)
@@ -462,6 +579,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 if not isinstance(value, (int, float)):
                     continue
                 paddle["y"] = max(0.0, min(1.0, value)) * max_y
+            elif action == "scream":
+                level = msg.get("level")
+                if not isinstance(level, (int, float)):
+                    continue
+                paddle["scream"] = max(paddle["scream"], max(0.0, min(1.0, level)))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
