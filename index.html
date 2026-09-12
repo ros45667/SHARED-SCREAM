@@ -1,17 +1,12 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Scream Pong</title>
 
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -25,14 +20,16 @@
             min-height: 100vh;
         }
 
-        h1 {
-            margin-bottom: 10px;
-        }
+        h1 { margin-bottom: 10px; }
 
         #gameCanvas {
             background: black;
             border: 3px solid white;
         }
+
+        /* Highlight which outer edge the ball can leave from on this screen */
+        #gameCanvas.side-left { border-right-style: dashed; border-right-color: #0ff; }
+        #gameCanvas.side-right { border-left-style: dashed; border-left-color: #0ff; }
 
         .instructions {
             margin-top: 15px;
@@ -40,16 +37,25 @@
             font-size: 18px;
         }
 
-        .score {
-            font-size: 30px;
-            margin-bottom: 10px;
+        .score { font-size: 30px; margin-bottom: 10px; }
+
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            font-size: 14px;
+            font-family: monospace;
         }
+        #status.connected { color: #0f0; }
+        #status.disconnected { color: #f33; }
     </style>
 </head>
 
 <body>
 
-    <h1>🎮 SCREAM PONG 🎮</h1>
+    <div id="status">connecting...</div>
+
+    <h1>🎮 SCREAM PONG <span id="sideLabel"></span> 🎮</h1>
 
     <div class="score">
         <span id="score1">0</span>
@@ -57,322 +63,127 @@
         <span id="score2">0</span>
     </div>
 
-    <canvas id="gameCanvas" width="1000" height="600"></canvas>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-    <div class="instructions">
-        Player 1: W / S
-        &nbsp;&nbsp; | &nbsp;&nbsp;
-        Player 2: ↑ / ↓
-    </div>
+    <div class="instructions" id="instructions"></div>
 
     <script>
-
         // ==========================================
-        // CANVAS
+        // SIDE / SCREEN SETUP
+        // Which half of the shared court this screen renders.
+        // Use ?side=left or ?side=right in the URL.
         // ==========================================
+        const params = new URLSearchParams(window.location.search);
+        const side = params.get("side") === "right" ? "right" : "left";
+        const myPlayer = side === "left" ? 1 : 2;
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
+        canvas.classList.add(side === "left" ? "side-left" : "side-right");
 
-        const WIDTH = canvas.width;
+        const WIDTH = canvas.width;   // this screen's own pixel width
         const HEIGHT = canvas.height;
 
+        document.getElementById("sideLabel").textContent =
+            side === "left" ? "(Left Court)" : "(Right Court)";
+        document.getElementById("instructions").textContent =
+            `Player ${myPlayer} keyboard: W / S or ↑ / ↓  —  ball crosses over to the other laptop's screen`;
+
+        // xOffset converts a WORLD x-coordinate (0..courtWidth) into a
+        // LOCAL x-coordinate for drawing on this screen's canvas.
+        let xOffset = side === "left" ? 0 : WIDTH;
 
         // ==========================================
-        // PADDLES
+        // LATEST STATE FROM SERVER (authoritative)
         // ==========================================
-
-        const paddleWidth = 15;
-
-        let paddleHeight = 100;
-
-        let paddle1 = {
-            x: 30,
-            y: HEIGHT / 2 - paddleHeight / 2,
-            width: paddleWidth,
-            height: paddleHeight,
-            speed: 7
-        };
-
-        let paddle2 = {
-            x: WIDTH - 45,
-            y: HEIGHT / 2 - paddleHeight / 2,
-            width: paddleWidth,
-            height: paddleHeight,
-            speed: 7
-        };
-
+        let latest = null;
 
         // ==========================================
-        // BALL
+        // WEBSOCKET
         // ==========================================
+        const statusEl = document.getElementById("status");
+        let ws;
 
-        let ball = {
-            x: WIDTH / 2,
-            y: HEIGHT / 2,
-            size: 15,
-            speedX: 5,
-            speedY: 5
-        };
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws/display-${side}`);
 
+            ws.onopen = () => {
+                statusEl.textContent = `connected (player ${myPlayer})`;
+                statusEl.className = "connected";
+            };
+            ws.onclose = () => {
+                statusEl.textContent = "disconnected — retrying...";
+                statusEl.className = "disconnected";
+                setTimeout(connect, 1000);
+            };
+            ws.onerror = () => ws.close();
+
+            ws.onmessage = (event) => {
+                latest = JSON.parse(event.data);
+                if (latest.court && latest.court.screen_width) {
+                    xOffset = side === "left" ? 0 : latest.court.screen_width;
+                }
+                document.getElementById("score1").textContent = latest.score.p1;
+                document.getElementById("score2").textContent = latest.score.p2;
+            };
+        }
+
+        connect();
+
+        function send(action) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action, player: myPlayer }));
+            }
+        }
 
         // ==========================================
-        // SCORE
+        // KEYBOARD — each screen controls its OWN paddle
         // ==========================================
-
-        let score1 = 0;
-        let score2 = 0;
-
-
-        // ==========================================
-        // KEYBOARD
-        // ==========================================
-
         let keys = {};
+        document.addEventListener("keydown", (e) => { keys[e.key] = true; });
+        document.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
-        document.addEventListener("keydown", function(event) {
-            keys[event.key] = true;
-        });
-
-        document.addEventListener("keyup", function(event) {
-            keys[event.key] = false;
-        });
-
-
-        // ==========================================
-        // RESET BALL
-        // ==========================================
-
-        function resetBall() {
-
-            ball.x = WIDTH / 2;
-            ball.y = HEIGHT / 2;
-
-            ball.speedX = ball.speedX > 0 ? -5 : 5;
-
-            ball.speedY = 5;
+        function pollKeys() {
+            if (keys["w"] || keys["W"] || keys["ArrowUp"]) send("up");
+            if (keys["s"] || keys["S"] || keys["ArrowDown"]) send("down");
         }
-
-
-        // ==========================================
-        // UPDATE GAME
-        // ==========================================
-
-        function update() {
-
-            // -----------------------------
-            // PLAYER 1
-            // -----------------------------
-
-            if (keys["w"] || keys["W"]) {
-                paddle1.y -= paddle1.speed;
-            }
-
-            if (keys["s"] || keys["S"]) {
-                paddle1.y += paddle1.speed;
-            }
-
-
-            // -----------------------------
-            // PLAYER 2
-            // -----------------------------
-
-            if (keys["ArrowUp"]) {
-                paddle2.y -= paddle2.speed;
-            }
-
-            if (keys["ArrowDown"]) {
-                paddle2.y += paddle2.speed;
-            }
-
-
-            // -----------------------------
-            // KEEP PADDLES INSIDE SCREEN
-            // -----------------------------
-
-            if (paddle1.y < 0) {
-                paddle1.y = 0;
-            }
-
-            if (paddle1.y + paddle1.height > HEIGHT) {
-                paddle1.y = HEIGHT - paddle1.height;
-            }
-
-            if (paddle2.y < 0) {
-                paddle2.y = 0;
-            }
-
-            if (paddle2.y + paddle2.height > HEIGHT) {
-                paddle2.y = HEIGHT - paddle2.height;
-            }
-
-
-            // -----------------------------
-            // MOVE BALL
-            // -----------------------------
-
-            ball.x += ball.speedX;
-            ball.y += ball.speedY;
-
-
-            // -----------------------------
-            // TOP / BOTTOM COLLISION
-            // -----------------------------
-
-            if (ball.y <= 0 || ball.y + ball.size >= HEIGHT) {
-                ball.speedY *= -1;
-            }
-
-
-            // -----------------------------
-            // PLAYER 1 COLLISION
-            // -----------------------------
-
-            if (
-                ball.x <= paddle1.x + paddle1.width &&
-                ball.x + ball.size >= paddle1.x &&
-                ball.y + ball.size >= paddle1.y &&
-                ball.y <= paddle1.y + paddle1.height &&
-                ball.speedX < 0
-            ) {
-
-                ball.speedX *= -1;
-            }
-
-
-            // -----------------------------
-            // PLAYER 2 COLLISION
-            // -----------------------------
-
-            if (
-                ball.x + ball.size >= paddle2.x &&
-                ball.x <= paddle2.x + paddle2.width &&
-                ball.y + ball.size >= paddle2.y &&
-                ball.y <= paddle2.y + paddle2.height &&
-                ball.speedX > 0
-            ) {
-
-                ball.speedX *= -1;
-            }
-
-
-            // -----------------------------
-            // PLAYER 2 SCORES
-            // -----------------------------
-
-            if (ball.x < 0) {
-
-                score2++;
-
-                document.getElementById("score2").textContent = score2;
-
-                resetBall();
-            }
-
-
-            // -----------------------------
-            // PLAYER 1 SCORES
-            // -----------------------------
-
-            if (ball.x > WIDTH) {
-
-                score1++;
-
-                document.getElementById("score1").textContent = score1;
-
-                resetBall();
-            }
-        }
-
+        // Send at a modest fixed rate so we don't flood the socket
+        setInterval(pollKeys, 1000 / 30);
 
         // ==========================================
-        // DRAW GAME
+        // DRAW — purely a function of the latest server state
         // ==========================================
-
         function draw() {
-
-            // Background
             ctx.fillStyle = "black";
             ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
+            if (!latest) return;
 
-            // -----------------------------
-            // CENTER LINE
-            // -----------------------------
-
-            ctx.strokeStyle = "white";
-            ctx.setLineDash([10, 10]);
-
-            ctx.beginPath();
-
-            ctx.moveTo(WIDTH / 2, 0);
-            ctx.lineTo(WIDTH / 2, HEIGHT);
-
-            ctx.stroke();
-
-            ctx.setLineDash([]);
-
-
-            // -----------------------------
-            // PADDLE 1
-            // -----------------------------
+            const paddleSize = latest.paddle_size;
+            const p1 = latest.paddles.p1;
+            const p2 = latest.paddles.p2;
+            const ball = latest.ball;
 
             ctx.fillStyle = "white";
 
-            ctx.fillRect(
-                paddle1.x,
-                paddle1.y,
-                paddle1.width,
-                paddle1.height
-            );
+            // Paddle 1 (only actually visible on the left screen; naturally
+            // clipped off-canvas on the right screen since its local x < 0)
+            ctx.fillRect(p1.x - xOffset, p1.y, paddleSize.width, paddleSize.height);
 
+            // Paddle 2 (only visible on the right screen)
+            ctx.fillRect(p2.x - xOffset, p2.y, paddleSize.width, paddleSize.height);
 
-            // -----------------------------
-            // PADDLE 2
-            // -----------------------------
-
-            ctx.fillRect(
-                paddle2.x,
-                paddle2.y,
-                paddle2.width,
-                paddle2.height
-            );
-
-
-            // -----------------------------
-            // BALL
-            // -----------------------------
-
-            ctx.fillRect(
-                ball.x,
-                ball.y,
-                ball.size,
-                ball.size
-            );
+            // Ball — this is what "travels between screens": it's one
+            // world-coordinate, each screen just draws its local slice
+            ctx.fillRect(ball.x - xOffset, ball.y, ball.size, ball.size);
         }
 
-
-        // ==========================================
-        // GAME LOOP
-        // ==========================================
-
-        function gameLoop() {
-
-            update();
-
+        function loop() {
             draw();
-
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(loop);
         }
-
-
-        // START GAME
-        gameLoop();
-
+        loop();
     </script>
 
 </body>
-
 </html>
-```
-

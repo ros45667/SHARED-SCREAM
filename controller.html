@@ -2,30 +2,40 @@
 <html>
 <head>
     <title>Pong - Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
         body { background: #000; color: #eee; font-family: monospace; display: flex;
                flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        button { width: 150px; height: 80px; font-size: 20px; margin: 10px; }
-        #status { position: fixed; top: 10px; left: 10px; color: #0f0; }
+        button { width: 150px; height: 100px; font-size: 22px; margin: 10px; touch-action: manipulation; }
+        #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-size: 14px; }
     </style>
 </head>
 <body>
     <div id="status">connecting...</div>
-    <h2>Controller (player 1)</h2>
+    <h2 id="title">Controller</h2>
     <button id="up">UP</button>
     <button id="down">DOWN</button>
 
     <script>
-        const status = document.getElementById('status');
-        const ws = new WebSocket(`ws://${location.host}/ws/controller`);
+        // Use ?player=1 or ?player=2 to pick which paddle this controls.
+        const params = new URLSearchParams(window.location.search);
+        const player = params.get("player") === "2" ? 2 : 1;
+        document.getElementById("title").textContent = `Controller (player ${player})`;
 
-        ws.onopen = () => { status.textContent = 'connected'; };
-        ws.onclose = () => { status.textContent = 'disconnected'; };
-        ws.onerror = () => { status.textContent = 'error'; };
+        const status = document.getElementById('status');
+        let ws;
+
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws/controller-${player}`);
+            ws.onopen = () => { status.textContent = 'connected'; };
+            ws.onclose = () => { status.textContent = 'disconnected — retrying...'; setTimeout(connect, 1000); };
+            ws.onerror = () => ws.close();
+        }
+        connect();
 
         function send(direction) {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: direction }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: direction, player }));
             }
         }
 
@@ -33,8 +43,8 @@
         document.getElementById('down').addEventListener('click', () => send('down'));
 
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') send('up');
-            if (e.key === 'ArrowDown') send('down');
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') send('up');
+            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') send('down');
         });
     </script>
 </body>
