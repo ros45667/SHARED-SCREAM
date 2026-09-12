@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pong - Controller</title>
+    <style>
+        body { background: #000; color: #eee; font-family: monospace; display: flex;
+               flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        button { width: 150px; height: 80px; font-size: 20px; margin: 10px; }
+        #status { position: fixed; top: 10px; left: 10px; color: #0f0; }
+    </style>
+</head>
+<body>
+    <div id="status">connecting...</div>
+    <h2>Controller (player 1)</h2>
+    <button id="up">UP</button>
+    <button id="down">DOWN</button>
+
+    <script>
+        const status = document.getElementById('status');
+        const ws = new WebSocket(`ws://${location.host}/ws/controller`);
+
+        ws.onopen = () => { status.textContent = 'connected'; };
+        ws.onclose = () => { status.textContent = 'disconnected'; };
+        ws.onerror = () => { status.textContent = 'error'; };
+
+        function send(direction) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: direction }));
+            }
+        }
+
+        document.getElementById('up').addEventListener('click', () => send('up'));
+        document.getElementById('down').addEventListener('click', () => send('down'));
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') send('up');
+            if (e.key === 'ArrowDown') send('down');
+        });
+    </script>
+</body>
+</html>

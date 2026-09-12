@@ -77,112 +77,18 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def get_main_display():
-    html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Pong - Main Display</title>
-    <style>
-        body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        canvas { background: #111; border: 2px solid #555; }
-        #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; }
-    </style>
-</head>
-<body>
-    <div id="status">connecting...</div>
-    <canvas id="game" width="800" height="600"></canvas>
-
-    <script>
-        const canvas = document.getElementById('game');
-        const ctx = canvas.getContext('2d');
-        const status = document.getElementById('status');
-
-        const ws = new WebSocket(`ws://${location.host}/ws/display`);
-
-        ws.onopen = () => { status.textContent = 'connected'; };
-        ws.onclose = () => { status.textContent = 'disconnected'; };
-        ws.onerror = (err) => { status.textContent = 'error'; console.error('WebSocket error:', err); };
-
-        ws.onmessage = (event) => {
-            const state = JSON.parse(event.data);
-            draw(state);
-        };
-
-        function draw(state) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Ball
-            ctx.fillStyle = 'white';
-            ctx.fillRect(state.ball.x, state.ball.y, 10, 10);
-
-            // Paddles
-            ctx.fillRect(10, state.paddles.p1, 10, 100);
-            ctx.fillRect(canvas.width - 20, state.paddles.p2, 10, 100);
-
-            // Score
-            ctx.font = '24px monospace';
-            ctx.fillText(`${state.score.p1}  -  ${state.score.p2}`, canvas.width / 2 - 30, 30);
-
-            // Center line
-            ctx.setLineDash([5, 10]);
-            ctx.beginPath();
-            ctx.moveTo(canvas.width / 2, 0);
-            ctx.lineTo(canvas.width / 2, canvas.height);
-            ctx.strokeStyle = '#444';
-            ctx.stroke();
-        }
-    </script>
-</body>
-</html>
-"""
+    with open("index.html", "r", encoding="utf-8") as file:
+      content = file.read()
+      print(content) 
+    html_content = content
     return HTMLResponse(content=html_content)
 
 
 @app.get("/controller")
 async def get_controller():
-    html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Pong - Controller</title>
-    <style>
-        body { background: #000; color: #eee; font-family: monospace; display: flex;
-               flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        button { width: 150px; height: 80px; font-size: 20px; margin: 10px; }
-        #status { position: fixed; top: 10px; left: 10px; color: #0f0; }
-    </style>
-</head>
-<body>
-    <div id="status">connecting...</div>
-    <h2>Controller (player 1)</h2>
-    <button id="up">UP</button>
-    <button id="down">DOWN</button>
-
-    <script>
-        const status = document.getElementById('status');
-        const ws = new WebSocket(`ws://${location.host}/ws/controller`);
-
-        ws.onopen = () => { status.textContent = 'connected'; };
-        ws.onclose = () => { status.textContent = 'disconnected'; };
-        ws.onerror = () => { status.textContent = 'error'; };
-
-        function send(direction) {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: direction }));
-            }
-        }
-
-        document.getElementById('up').addEventListener('click', () => send('up'));
-        document.getElementById('down').addEventListener('click', () => send('down'));
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') send('up');
-            if (e.key === 'ArrowDown') send('down');
-        });
-    </script>
-</body>
-</html>
-"""
+    with open('controller.html', 'r', encoding="utf-8") as file:
+      content = file.read()
+    html_content = content
     return HTMLResponse(content=html_content)
 
 
