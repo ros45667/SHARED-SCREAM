@@ -131,8 +131,8 @@
              * server uses these coordinates.
              */
 
-            width: 100vw;
-            height: 100vh;
+            width: min(100vw, calc(100vh * 700 / 1200));
+            height: min(100vh, calc(100vw * 1200 / 700));
 
             max-width: 100vw;
             max-height: 100vh;
@@ -150,16 +150,14 @@
         ===================================================== */
 
         #gameCanvas.side-left {
-
-            border-right:
+            border-bottom:
                 2px dashed
                 rgba(0, 255, 255, 0.35);
         }
 
 
         #gameCanvas.side-right {
-
-            border-left:
+            border-top:
                 2px dashed
                 rgba(0, 255, 255, 0.35);
         }
@@ -639,6 +637,10 @@ const params =
 const mode =
     params.get("mode");
 
+// QR phone-handshake state
+let qrWaitingForPhone = false;
+let initialPaddleY = null;
+
 
 // ============================================================
 // CONTROL METHOD SELECTION
@@ -685,6 +687,7 @@ if (mode !== "controller") {
     document.getElementById("laptopControl").onclick =
         function() {
             overlay.style.display = "none";
+            qrWaitingForPhone = false;
             document.getElementById("qrSection").style.display = "none";
         };
 
@@ -692,6 +695,8 @@ if (mode !== "controller") {
     document.getElementById("phoneControl").onclick =
         function() {
             overlay.style.display = "none";
+            qrWaitingForPhone = true;
+            initialPaddleY = null;
             showPhoneQR(myPlayer);
         };
 }
@@ -1032,8 +1037,8 @@ else {
     ).textContent =
 
         side === "left"
-            ? "PLAYER 1 • LEFT"
-            : "PLAYER 2 • RIGHT";
+            ? "PLAYER 1 • TOP"
+            : "PLAYER 2 • BOTTOM";
 
 
     // --------------------------------------------------------
@@ -1043,10 +1048,12 @@ else {
     let latest = null;
 
 
-    let xOffset =
+    // Server world remains horizontal; we display it rotated 90 degrees.
+    // Player 1 is the TOP half and Player 2 is the BOTTOM half.
+    let yOffset =
         side === "left"
             ? 0
-            : WIDTH;
+            : 1200;
 
 
     // --------------------------------------------------------
@@ -1122,6 +1129,36 @@ else {
                         event.data
                     );
 
+                // If the server exposes controller_connected, hide the QR
+                // immediately when the phone connects after scanning.
+                if (
+                    qrWaitingForPhone &&
+                    latest.controller_connected === true
+                ) {
+                    document.getElementById("qrSection").style.display = "none";
+                    qrWaitingForPhone = false;
+                }
+
+                // Fallback for the current server: hide it after the first
+                // real paddle movement from the phone.
+                if (qrWaitingForPhone && latest.paddles) {
+                    const myPaddle =
+                        myPlayer === 1
+                            ? latest.paddles.p1
+                            : latest.paddles.p2;
+
+                    if (myPaddle) {
+                        if (initialPaddleY === null) {
+                            initialPaddleY = myPaddle.y;
+                        } else if (
+                            Math.abs(myPaddle.y - initialPaddleY) > 1
+                        ) {
+                            document.getElementById("qrSection").style.display = "none";
+                            qrWaitingForPhone = false;
+                        }
+                    }
+                }
+
 
                 if (
 
@@ -1132,7 +1169,7 @@ else {
                 ) {
 
 
-                    xOffset =
+                    yOffset =
 
                         side === "left"
                             ? 0
@@ -1357,33 +1394,24 @@ else {
             "white";
 
 
+        // Rotate the server's horizontal world into a vertical court.
+        // X becomes screen Y; Y becomes screen X.
+        // Paddles therefore become horizontal at the top/bottom edges.
+
         // Player 1
-
         ctx.fillRect(
-
-            p1.x - xOffset,
-
             p1.y,
-
-            paddleSize.width,
-
-            paddleSize.height
-
+            p1.x - yOffset,
+            paddleSize.height,
+            paddleSize.width
         );
 
-
         // Player 2
-
         ctx.fillRect(
-
-            p2.x - xOffset,
-
             p2.y,
-
-            paddleSize.width,
-
-            paddleSize.height
-
+            p2.x - yOffset,
+            paddleSize.height,
+            paddleSize.width
         );
 
 
@@ -1396,19 +1424,11 @@ else {
 
 
         ctx.arc(
-
-            ball.x - xOffset +
-                ball.size / 2,
-
-            ball.y +
-                ball.size / 2,
-
+            ball.y + ball.size / 2,
+            ball.x - yOffset + ball.size / 2,
             ball.size / 2,
-
             0,
-
             Math.PI * 2
-
         );
 
 
@@ -1435,12 +1455,14 @@ else {
         ctx.fillText(
 
             side === "left"
-                ? "PLAYER 1"
-                : "PLAYER 2",
+                ? "PLAYER 1 • TOP"
+                : "PLAYER 2 • BOTTOM",
 
             WIDTH / 2,
 
-            HEIGHT - 20
+            side === "left"
+                ? HEIGHT - 20
+                : 20
 
         );
 
