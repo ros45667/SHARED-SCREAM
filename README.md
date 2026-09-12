@@ -304,11 +304,12 @@ BROADCAST_HZ=20 python main.py
 
 ## Screenshots
 
-<!--
-  Add screenshots below — drag image files into the GitHub issue/PR editor
-  (or upload to an `assets/` folder and reference them) to get a hosted URL,
-  then swap it in below.
--->
+<img width="1917" height="926" alt="image" src="https://github.com/user-attachments/assets/f223a3a1-bb34-4f0b-b785-bbc4ca00d7fb" />
+<img width="1080" height="2099" alt="WhatsApp Image 2026-09-12 at 3 17 13 PM" src="https://github.com/user-attachments/assets/04545452-215a-44b1-b2d3-27a292ba00a7" />
+<img width="1876" height="922" alt="image" src="https://github.com/user-attachments/assets/145ae34a-bbe8-4168-bc7b-0bd2186a8eb9" />
+<img width="720" height="1303" alt="image" src="https://github.com/user-attachments/assets/79a345b6-3f79-46e4-9c4a-a413e19a3608" />
+
+
 
 | Laptop display (left court) | Laptop display (right court) |
 |---|---|
@@ -334,15 +335,8 @@ screenshots are in place.*
   `access_log=False` / `log_level="warning"` on the HTTPS server in
   `main.py` once things are working reliably.
 
+
 ## Team
-
-### Team Name: [Name]
-
-- Team Lead: [Name] — [College]
-- Member 2: [Name] — [College]
-- Member 3: [Name] — [College]
-
-## Team Contributions
 - Rosmi Reji
 - Robinson George Arysseril
 
