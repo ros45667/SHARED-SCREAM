@@ -1,0 +1,61 @@
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background: #000; color: #eee; font-family: -apple-system, Arial, sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; margin: 0; padding: 16px; text-align: center; overflow: hidden;
+            transition: background-color 120ms ease-out;
+        }
+
+        h2 { margin: 4px 0 20px; }
+
+        #status {
+            position: fixed; top: 10px; left: 10px; color: #0f0; font-size: 13px; font-family: monospace;
+        }
+
+        .screen { display: none; width: 100%; max-width: 360px; }
+        .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+        /* ---- Mode select ---- */
+        .mode-btn {
+            width: 100%; padding: 22px; margin: 10px 0; font-size: 19px; border-radius: 14px;
+            border: 2px solid #444; background: #151515; color: #eee;
+        }
+        .mode-btn:active { background: #222; }
+        .mode-btn .sub { display: block; font-size: 13px; color: #999; margin-top: 6px; font-weight: normal; }
+
+        /* ---- Button mode ---- */
+        button.control {
+            width: 160px; height: 90px; font-size: 22px; margin: 10px; border-radius: 12px;
+            border: none; background: #2a2a2a; color: #eee; touch-action: none;
+        }
+        button.control:active { background: #3a3a3a; }
+
+        /* ---- Motion mode ---- */
+        #tiltTrack {
+            position: relative; width: 60px; height: 260px; background: #151515;
+            border-radius: 30px; border: 2px solid #333; margin: 20px 0; overflow: hidden;
+        }
+        #tiltPuck {
+            position: absolute; left: 5px; width: 50px; height: 50px; border-radius: 50%;
+            background: #0af; transition: background-color 120ms ease-out;
+        }
+        #tiltPuck.flash { background: #ff9900; }
+
+        #swingMeter {
+            width: 100%; height: 10px; background: #151515; border-radius: 5px; overflow: hidden; margin-bottom: 8px;
+        }
+        #swingMeterFill { height: 100%; width: 0%; background: #0af; }
+
+        .scream-meter {
+            width: 100%; height: 10px; background: #151515; border-radius: 5px; overflow: hidden; margin: 10px 0 4px;
+        }
+        .scream-meter-fill { height: 100%; width: 0%; background: #ff3b6b; transition: width 60ms linear; }
+        .scream-label { font-size: 12px; color: #999; margin: 0 0 4px; }
+
+        #body.scream-flash { background-color: #3a0012 !important; }
+
+        .hint { font-size: 14px; color: #999; margin-top: 8px; line-height: 1.5; }
+        .warn { font-size: 13px; color: #ffb300; margin-top: 10px; line-height: 1.4; }
+
+        .link-btn { background: none; border: none; color: #0af; font-size: 14px; margin-top: 22px; padding: 10px; }

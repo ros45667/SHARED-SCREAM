@@ -233,13 +233,22 @@ Phones will see a one-time browser warning for the self-signed cert (click
 
 ```
 .
-├── main.py            # FastAPI server: physics, WebSocket protocol, HTTP/HTTPS listeners, TLS bootstrap
-├── index.html          # Laptop display (game canvas, QR code, keyboard controls)
-├── controller.html      # Phone controller (button mode / motion mode / scream meter)
-├── requirements.txt    # Python dependencies
-├── cert.pem / key.pem  # Auto-generated self-signed TLS cert+key (regenerated as needed)
+├── main.py                        # FastAPI server: physics, WebSocket protocol, HTTP/HTTPS listeners, TLS bootstrap
+├── pages/
+│   ├── index/
+│   │   ├── index.html             # Laptop display markup (game canvas, QR code, keyboard controls)
+│   │   ├── index.css              # Styles for index.html
+│   │   └── index.js               # Display logic: WebSocket state, canvas rendering, QR/setup flow
+│   └── controller/
+│       ├── controller.html        # Phone controller markup (button mode / motion mode / scream meter)
+│       ├── controller.css         # Styles for controller.html
+│       └── controller.js          # Controller logic: button/motion input, scream meter, WebSocket send
+├── requirements.txt               # Python dependencies
+├── cert.pem / key.pem             # Auto-generated self-signed TLS cert+key (regenerated as needed)
 └── README.md
 ```
+
+Each page's HTML, CSS, and JS live together in their own folder under `pages/`. `main.py` reads `pages/index/index.html` and `pages/controller/controller.html` at `/` and `/controller` as before, and mounts the whole `pages/` directory at `/static` (via FastAPI's `StaticFiles`) so each page's `<link>`/`<script src>` tags can pull in its own CSS/JS, e.g. `/static/index/index.css` and `/static/controller/controller.js`.
 
 ## Setup & installation
 

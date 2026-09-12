@@ -12,6 +12,7 @@ from typing import List
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 # ==========================================
 # WINDOWS + SSL WORKAROUND
@@ -512,10 +513,16 @@ async def game_loop():
 
 app = FastAPI()
 
+# Each page's HTML, CSS, and JS live together under pages/<page>/. Mounting
+# "pages" at /static lets index.html/controller.html reference their own
+# CSS/JS as /static/index/index.css, /static/index/index.js,
+# /static/controller/controller.css, /static/controller/controller.js.
+app.mount("/static", StaticFiles(directory="pages"), name="static")
+
 
 @app.get("/")
 async def get_main_display():
-    with open("index.html", "r", encoding="utf-8") as file:
+    with open("pages/index/index.html", "r", encoding="utf-8") as file:
         html_content = file.read()
     # index.html's QR code needs to know the HTTPS port so it can build a
     # secure URL for phones even though this page is normally loaded over
@@ -526,7 +533,7 @@ async def get_main_display():
 
 @app.get("/controller")
 async def get_controller():
-    with open("controller.html", "r", encoding="utf-8") as file:
+    with open("pages/controller/controller.html", "r", encoding="utf-8") as file:
         html_content = file.read()
     return HTMLResponse(content=html_content)
 

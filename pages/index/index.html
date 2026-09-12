@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <!-- Injected by the server (see main.py) so the QR code below can always
+         point phones at the HTTPS listener, even though this display page
+         itself is normally loaded over plain HTTP. -->
+    <script>window.HTTPS_PORT = __HTTPS_PORT__;</script>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Shared Scream</title>
+
+    <!-- QR CODE LIBRARY -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+
+    <link rel="stylesheet" href="/static/index/index.css">
+
+</head>
+
+
+<body>
+
+
+<!-- =========================================================
+     SETUP FLOW (choose controls -> connect phone -> start)
+========================================================= -->
+
+<div id="setupOverlay">
+
+    <!-- Step 1: pick a control method -->
+    <div id="setupScreenMode" class="setup-screen active">
+        <h1>SHARED SCREAM</h1>
+        <p>How do you want to play?</p>
+
+        <button class="setup-btn" id="chooseKeyboard">
+            ⌨ Keyboard
+            <span class="sub">W/S or arrow keys on this laptop</span>
+        </button>
+
+        <button class="setup-btn" id="choosePhone">
+            📱 Phone Controller
+            <span class="sub">Tilt to move, scream to grow your paddle</span>
+        </button>
+    </div>
+
+    <!-- Step 2 (phone only): scan + confirm connection -->
+    <div id="setupScreenPhone" class="setup-screen">
+        <h1>Scan with your phone</h1>
+        <p>Then connect it to your paddle</p>
+
+        <div id="setupQrcode"></div>
+        <div id="setupQrText"></div>
+
+        <button class="setup-btn primary" id="phoneConnectedBtn">
+            ✅ I've Connected My Phone
+        </button>
+
+        <button class="setup-link" id="setupBackFromPhone">&larr; Change control method</button>
+    </div>
+
+    <!-- Step 3: start the game -->
+    <div id="setupScreenReady" class="setup-screen">
+        <h1>Ready to play</h1>
+        <p id="readySubtext">Controls set. Whenever you're ready:</p>
+
+        <button class="setup-btn primary" id="startGameBtn">
+            ▶ Start Game
+        </button>
+
+        <button class="setup-link" id="setupBackFromReady">&larr; Change control method</button>
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     LAPTOP GAME
+========================================================= -->
+
+<div id="gamePage">
+
+
+    <!-- Background watermark -->
+
+    <div id="backgroundTitle">
+        SHARED SCREAM
+    </div>
+
+
+    <!-- Connection -->
+
+    <div id="status">
+        connecting...
+    </div>
+
+
+    <!-- Side -->
+
+    <div id="sideLabel"></div>
+
+
+    <!-- Score -->
+
+    <div id="scoreBoard">
+
+        <span id="score1">0</span>
+
+        <span id="scoreDivider">:</span>
+
+        <span id="score2">0</span>
+
+    </div>
+
+
+    <!-- Game -->
+
+    <div id="gameWrapper">
+
+        <canvas
+            id="gameCanvas">
+        </canvas>
+
+    </div>
+
+
+    <!-- QR -->
+
+    <div id="qrSection">
+
+        <h3>
+            📱 PHONE CONTROL
+        </h3>
+
+        <div id="qrcode"></div>
+
+        <div id="qrText">
+            Scan to control your paddle
+        </div>
+
+    </div>
+
+
+</div>
+
+
+
+<!-- =========================================================
+     PHONE CONTROLLER
+========================================================= -->
+
+<div id="controller">
+
+
+    <h1>
+        SHARED SCREAM
+    </h1>
+
+
+    <div class="controller-info">
+
+        Player
+        <span id="phonePlayer">
+            1
+        </span>
+
+    </div>
+
+
+    <div id="phoneStatus">
+        Connecting...
+    </div>
+
+
+    <button
+        class="control-button"
+        id="upButton">
+
+        ⬆️
+
+    </button>
+
+
+    <button
+        class="control-button"
+        id="downButton">
+
+        ⬇️
+
+    </button>
+
+
+</div>
+
+
+
+<script src="/static/index/index.js"></script>
+
+</body>
+
+</html>

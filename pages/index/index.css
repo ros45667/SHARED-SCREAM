@@ -1,0 +1,610 @@
+
+        /* =====================================================
+           GLOBAL
+        ===================================================== */
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        html,
+        body {
+
+            width: 100%;
+            height: 100%;
+
+            margin: 0;
+            padding: 0;
+
+            overflow: hidden;
+
+            background: #050505;
+
+            color: white;
+
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+
+        /* =====================================================
+           MAIN GAME AREA
+        ===================================================== */
+
+        #gamePage {
+
+            position: relative;
+
+            width: 100vw;
+            height: 100vh;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            overflow: hidden;
+
+            background: #050505;
+        }
+
+
+        /* =====================================================
+           SHARED SCREAM BACKGROUND
+        ===================================================== */
+
+        #backgroundTitle {
+
+            position: absolute;
+
+            top: 50%;
+            left: 50%;
+
+            transform:
+                translate(-50%, -50%);
+
+            font-size: clamp(80px, 13vw, 230px);
+
+            font-weight: 900;
+
+            letter-spacing: 15px;
+
+            white-space: nowrap;
+
+            color: rgba(255, 255, 255, 0.035);
+
+            pointer-events: none;
+
+            user-select: none;
+
+            z-index: 0;
+        }
+
+
+        /* =====================================================
+           GAME AREA
+        ===================================================== */
+
+        #gameWrapper {
+
+            position: relative;
+
+            width: 100%;
+            height: 100%;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            z-index: 2;
+        }
+
+
+        /* =====================================================
+           GAME CANVAS
+        ===================================================== */
+
+        #gameCanvas {
+
+            /*
+             * Full-bleed play area
+             *
+             * The canvas now always fills the entire viewport, on both
+             * axes, instead of being locked to the server's 600x800
+             * world aspect ratio (which used to letterbox on any screen
+             * that wasn't exactly 3:4, wasting a chunk of the display).
+             * The world is still a fixed size on the server -- draw()
+             * below computes independent X/Y scale factors every frame
+             * (canvas pixel size / world size) so everything the server
+             * sends still lands in the right place, just stretched to
+             * fill whatever this screen's real resolution is. The JS
+             * resize handler keeps canvas.width/height (the drawing
+             * buffer) matching this CSS size, including devicePixelRatio,
+             * so the image stays sharp on high-DPI screens.
+             */
+
+            width: 100vw;
+            height: 100vh;
+
+            background: transparent;
+
+            display: block;
+        }
+
+
+        /* =====================================================
+           SIDE INDICATORS
+        ===================================================== */
+
+        /* Both screens now show the ball/paddle-perpendicular axis with
+           the player's own paddle at the BOTTOM and the seam where the
+           two courts join (where the ball crosses from one screen to the
+           other) at the TOP -- so both get the same dashed top border.
+           That top edge is just a crossing point, not a bounce, so it
+           stays dashed and dim. The LEFT and RIGHT edges are different:
+           after the 90-degree rotation they're the court's actual top
+           and bottom walls (world y=0 and y=CANVAS_HEIGHT in main.py's
+           step_physics), which is exactly where the ball bounces -- so
+           they get a brighter, solid, glowing line to make that
+           collision boundary obvious at a glance. */
+        #gameCanvas.side-left,
+        #gameCanvas.side-right {
+            border-top:
+                2px dashed
+                rgba(255, 255, 255, 0.18);
+
+            /* Soft lavender-white instead of a neon cyan -- still
+               clearly visible against the black court, but reads as a
+               court boundary/light strip rather than an arcade glow. */
+            border-left:
+                3px solid
+                rgba(214, 205, 255, 0.55);
+
+            border-right:
+                3px solid
+                rgba(214, 205, 255, 0.55);
+
+            box-shadow:
+                inset 6px 0 16px rgba(139, 110, 246, 0.12),
+                inset -6px 0 16px rgba(139, 110, 246, 0.12);
+        }
+
+
+        /* =====================================================
+           SCORE
+        ===================================================== */
+
+        #scoreBoard {
+
+            position: absolute;
+
+            top: 22px;
+
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            z-index: 10;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 28px;
+
+            font-size: 28px;
+
+            font-weight: 600;
+
+            letter-spacing: 3px;
+
+            pointer-events: none;
+        }
+
+
+        #score1,
+        #score2 {
+
+            min-width: 30px;
+
+            text-align: center;
+        }
+
+
+        #scoreDivider {
+
+            opacity: 0.35;
+
+            font-size: 18px;
+        }
+
+
+        /* =====================================================
+           SCREEN SIDE LABEL
+        ===================================================== */
+
+        #sideLabel {
+
+            position: absolute;
+
+            top: 68px;
+
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            z-index: 10;
+
+            font-size: 12px;
+
+            letter-spacing: 4px;
+
+            text-transform: uppercase;
+
+            opacity: 0.45;
+
+            pointer-events: none;
+        }
+
+
+        /* =====================================================
+           CONNECTION STATUS
+        ===================================================== */
+
+        #status {
+
+            position: absolute;
+
+            top: 20px;
+            left: 20px;
+
+            z-index: 20;
+
+            font-size: 13px;
+
+            font-family: monospace;
+
+            opacity: 0.8;
+        }
+
+
+        #status.connected {
+
+            color: #00ff66;
+        }
+
+
+        #status.disconnected {
+
+            color: #ff3333;
+        }
+
+
+        /* =====================================================
+           QR CODE PANEL
+        ===================================================== */
+
+        #qrSection {
+
+            /* Hidden by default -- the setup flow (see #setupOverlay) is
+               where players scan the QR code before the game starts.
+               This corner copy is only switched back on during play for
+               phone players, as a quick way to rescan if their phone
+               disconnects (see the startGameBtn handler in the script). */
+            display: none;
+
+            position: absolute;
+
+            right: 25px;
+            bottom: 25px;
+
+            z-index: 30;
+
+            width: 175px;
+
+            padding: 12px;
+
+            background: rgba(255, 255, 255, 0.96);
+
+            color: black;
+
+            border-radius: 12px;
+
+            text-align: center;
+
+            box-shadow:
+                0 0 20px
+                rgba(139, 110, 246, 0.25);
+        }
+
+
+        #qrSection h3 {
+
+            margin: 0 0 8px;
+
+            font-size: 14px;
+
+            letter-spacing: 1px;
+        }
+
+
+        #qrcode {
+
+            width: 145px;
+            height: 145px;
+
+            margin: auto;
+        }
+
+
+        #qrText {
+
+            margin-top: 7px;
+
+            font-size: 9px;
+
+            line-height: 1.3;
+
+            word-break: break-all;
+
+            opacity: 0.65;
+        }
+
+
+        /* =====================================================
+           PHONE CONTROLLER
+        ===================================================== */
+
+        #controller {
+
+            display: none;
+
+            width: 100vw;
+            height: 100vh;
+
+            background: #050505;
+
+            flex-direction: column;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 20px;
+        }
+
+
+        #controller h1 {
+
+            font-size: 32px;
+
+            letter-spacing: 3px;
+        }
+
+
+        .controller-info {
+
+            font-size: 20px;
+        }
+
+
+        #phoneStatus {
+
+            font-family: monospace;
+
+            color: #00ff66;
+        }
+
+
+        .control-button {
+
+            width: 80vw;
+
+            max-width: 400px;
+
+            height: 130px;
+
+            font-size: 55px;
+
+            border: none;
+
+            border-radius: 25px;
+
+            background: #181818;
+
+            color: white;
+
+            box-shadow:
+                0 0 20px
+                rgba(0, 255, 255, 0.2);
+
+            touch-action: none;
+
+            user-select: none;
+        }
+
+
+        .control-button:active {
+
+            background: #00aaaa;
+
+            transform: scale(0.97);
+        }
+
+
+        /* =====================================================
+           SETUP OVERLAY (choose controls -> connect -> start)
+        ===================================================== */
+
+        #setupOverlay {
+
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 100;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background: radial-gradient(circle at 50% 40%, #141018 0%, #050505 70%);
+
+            color: white;
+
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+
+        .setup-screen {
+
+            display: none;
+
+            flex-direction: column;
+
+            align-items: center;
+
+            width: 90vw;
+
+            max-width: 420px;
+
+            text-align: center;
+        }
+
+
+        .setup-screen.active {
+
+            display: flex;
+        }
+
+
+        .setup-screen h1 {
+
+            font-size: clamp(22px, 4vw, 32px);
+
+            letter-spacing: 3px;
+
+            margin: 0 0 6px;
+        }
+
+
+        .setup-screen p {
+
+            color: rgba(255, 255, 255, 0.55);
+
+            font-size: 15px;
+
+            margin: 0 0 26px;
+        }
+
+
+        .setup-btn {
+
+            width: 100%;
+
+            padding: 22px;
+
+            margin: 8px 0;
+
+            font-size: 18px;
+
+            font-weight: 600;
+
+            letter-spacing: 0.5px;
+
+            border-radius: 16px;
+
+            border: 1px solid rgba(255, 255, 255, 0.12);
+
+            background: #16141a;
+
+            color: #f2f0f7;
+
+            cursor: pointer;
+
+            transition: transform 120ms ease, border-color 120ms ease;
+        }
+
+
+        .setup-btn:active {
+
+            transform: scale(0.97);
+
+            border-color: rgba(196, 181, 253, 0.6);
+        }
+
+
+        .setup-btn .sub {
+
+            display: block;
+
+            margin-top: 6px;
+
+            font-size: 12.5px;
+
+            font-weight: normal;
+
+            color: rgba(255, 255, 255, 0.45);
+        }
+
+
+        .setup-btn.primary {
+
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+
+            border: none;
+
+            font-size: 20px;
+
+            padding: 26px;
+        }
+
+
+        .setup-link {
+
+            background: none;
+
+            border: none;
+
+            color: rgba(196, 181, 253, 0.85);
+
+            font-size: 14px;
+
+            margin-top: 18px;
+
+            padding: 8px;
+
+            cursor: pointer;
+        }
+
+
+        #setupQrcode {
+
+            width: 190px;
+            height: 190px;
+
+            margin: 0 auto 16px;
+
+            padding: 12px;
+
+            background: white;
+
+            border-radius: 14px;
+        }
+
+
+        #setupQrText {
+
+            font-size: 12px;
+
+            color: rgba(255, 255, 255, 0.4);
+
+            word-break: break-all;
+
+            margin-bottom: 22px;
+        }
+

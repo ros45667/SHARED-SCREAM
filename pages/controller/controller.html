@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pong - Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="/static/controller/controller.css">
+</head>
+<body id="body">
+    <div id="status">connecting...</div>
+
+    <!-- ============================================================
+         SCREEN 1: MODE SELECT
+    ============================================================= -->
+    <div id="screen-select" class="screen active">
+        <h2 id="titleSelect">Controller</h2>
+        <button class="mode-btn" id="pickButtons">
+            🕹️ Button Controls
+            <span class="sub">Tap UP / DOWN to move your paddle</span>
+        </button>
+        <button class="mode-btn" id="pickMotion">
+            📱 Motion Controls
+            <span class="sub">Tilt to move, swing your phone to hit</span>
+        </button>
+    </div>
+
+    <!-- ============================================================
+         SCREEN 2: BUTTON MODE
+    ============================================================= -->
+    <div id="screen-buttons" class="screen">
+        <h2 id="titleButtons">Controller</h2>
+        <button class="control" id="up">UP</button>
+        <button class="control" id="down">DOWN</button>
+
+        <div id="screamPromptButtons" class="scream-section">
+            <button class="link-btn" data-enable-scream>🎤 Enable Scream Power</button>
+        </div>
+        <div id="screamMeterButtons" class="scream-section" style="display:none; width:100%;">
+            <p class="scream-label">scream power (grows your paddle)</p>
+            <div class="scream-meter"><div class="scream-meter-fill"></div></div>
+        </div>
+
+        <button class="link-btn" data-back>⟵ Change control mode</button>
+    </div>
+
+    <!-- ============================================================
+         SCREEN 3: MOTION MODE
+    ============================================================= -->
+    <div id="screen-motion" class="screen">
+        <h2 id="titleMotion">Controller</h2>
+
+        <div id="motionPrompt">
+            <p class="hint">Motion controls need permission to read your phone's sensors.</p>
+            <button class="mode-btn" id="enableMotion">Enable Motion Controls</button>
+            <p class="warn" id="secureWarning" style="display:none;">
+                ⚠️ This page isn't loaded over HTTPS. Some phone browsers block motion
+                sensors on plain http:// connections — if nothing happens after tapping
+                Enable, try serving the app over HTTPS.
+            </p>
+            <button class="link-btn" data-back>⟵ Change control mode</button>
+        </div>
+
+        <div id="motionActive" style="display:none;">
+            <div id="swingMeter"><div id="swingMeterFill"></div></div>
+            <p class="hint" style="margin-top:0;">swing power</p>
+
+            <div id="tiltTrack"><div id="tiltPuck"></div></div>
+
+            <p class="hint">Tilt the phone up/down to move your paddle.<br>Swing it sharply to hit the ball with power.</p>
+
+            <div id="screamPromptMotion" class="scream-section">
+                <button class="link-btn" data-enable-scream>🎤 Enable Scream Power</button>
+            </div>
+            <div id="screamMeterMotion" class="scream-section" style="display:none; width:100%;">
+                <p class="scream-label">scream power (grows your paddle)</p>
+                <div class="scream-meter"><div class="scream-meter-fill"></div></div>
+            </div>
+
+            <button class="link-btn" id="recalibrate">🎯 Recalibrate center</button>
+            <button class="link-btn" data-back>⟵ Change control mode</button>
+        </div>
+    </div>
+
+<script src="/static/controller/controller.js"></script>
+</body>
+</html>
