@@ -318,14 +318,11 @@ BROADCAST_HZ=20 python main.py
 ```
 
 ## Screenshots
+<img width="500" height="241" alt="image" src="https://github.com/user-attachments/assets/f223a3a1-bb34-4f0b-b785-bbc4ca00d7fb" />
+<img width="500" height="246" alt="image" src="https://github.com/user-attachments/assets/145ae34a-bbe8-4168-bc7b-0bd2186a8eb9" />
+<img width="250" height="486" alt="WhatsApp Image 2026-09-12 at 3 17 13 PM" src="https://github.com/user-attachments/assets/04545452-215a-44b1-b2d3-27a292ba00a7" />
+<img width="250" height="452" alt="image" src="https://github.com/user-attachments/assets/79a345b6-3f79-46e4-9c4a-a413e19a3608" />
 
-<img width="1917" height="926" alt="image" src="https://github.com/user-attachments/assets/f223a3a1-bb34-4f0b-b785-bbc4ca00d7fb" />
-<img width="1080" height="2099" alt="WhatsApp Image 2026-09-12 at 3 17 13 PM" src="https://github.com/user-attachments/assets/04545452-215a-44b1-b2d3-27a292ba00a7" />
-<img width="1876" height="922" alt="image" src="https://github.com/user-attachments/assets/145ae34a-bbe8-4168-bc7b-0bd2186a8eb9" />
-<img width="720" height="1303" alt="image" src="https://github.com/user-attachments/assets/79a345b6-3f79-46e4-9c4a-a413e19a3608" />
-
-*Add a caption under each image explaining what it shows once the real
-screenshots are in place.*
 
 ## Troubleshooting
 
