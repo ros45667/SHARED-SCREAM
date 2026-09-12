@@ -1,5 +1,9 @@
 # Scream Pong
 
+### Demo
+
+View Our Poster [Here](https://death7654.github.io/) to see a full list of features and how it works!!!
+
 A two-laptop, split-screen Pong where the "court" is twice as wide as either
 screen — the ball physically travels from one laptop to the other. Each
 player's paddle is controlled by their **phone**, and the harder you scream
@@ -317,16 +321,6 @@ BROADCAST_HZ=20 python main.py
 <img width="1080" height="2099" alt="WhatsApp Image 2026-09-12 at 3 17 13 PM" src="https://github.com/user-attachments/assets/04545452-215a-44b1-b2d3-27a292ba00a7" />
 <img width="1876" height="922" alt="image" src="https://github.com/user-attachments/assets/145ae34a-bbe8-4168-bc7b-0bd2186a8eb9" />
 <img width="720" height="1303" alt="image" src="https://github.com/user-attachments/assets/79a345b6-3f79-46e4-9c4a-a413e19a3608" />
-
-
-
-| Laptop display (left court) | Laptop display (right court) |
-|---|---|
-| ![Left court](assets/screenshot-left.png) | ![Right court](assets/screenshot-right.png) |
-
-| QR code / setup screen | Phone: button controls | Phone: motion controls |
-|---|---|---|
-| ![Setup / QR](assets/screenshot-setup.png) | ![Button controller](assets/screenshot-buttons.png) | ![Motion controller](assets/screenshot-motion.png) |
 
 *Add a caption under each image explaining what it shows once the real
 screenshots are in place.*
