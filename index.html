@@ -1165,9 +1165,8 @@ else {
     // --------------------------------------------------------
     // CONTROLLER URL / QR HELPER
     // --------------------------------------------------------
-    // Shared by the setup screen's QR code (shown before the game
-    // starts) and the small corner QR panel (kept available during
-    // play so a phone player can rescan if they get disconnected).
+    // Used only by the setup screen's QR code, shown before the game
+    // starts. The in-game QR panel is intentionally never shown.
     // Always HTTPS regardless of what protocol this display page
     // itself loaded over: phones need a secure context for motion
     // controls, and /controller (not the old ?mode=controller button
@@ -1279,15 +1278,11 @@ else {
             // first real draw.
             resizeCanvas();
 
+            // The QR code is only needed during setup.
+            // Once the game starts, never show the in-game QR panel.
             const qrSection = document.getElementById("qrSection");
-            if (controlMethod === "phone") {
-                // Keep a small QR available during play in case this
-                // player's phone disconnects and needs a rescan.
-                renderControllerQR("qrcode", "qrText");
-                qrSection.style.display = "block";
-            } else {
-                qrSection.style.display = "none";
-            }
+            qrSection.style.display = "none";
+            qrWaitingForPhone = false;
 
             connect();
             loop();
@@ -1333,28 +1328,34 @@ else {
 
     function resizeCanvas() {
 
+        // Cap DPR so very high-resolution screens don't force huge canvas
+        // buffers and expensive redraws every frame.
         const dpr =
-            window.devicePixelRatio || 1;
+            Math.min(window.devicePixelRatio || 1, 2);
 
-        canvas.width =
+        const width =
             Math.round(canvas.clientWidth * dpr);
 
-        canvas.height =
+        const height =
             Math.round(canvas.clientHeight * dpr);
+
+        if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+        }
 
     }
 
 
-    window.addEventListener(
-        "resize",
-        resizeCanvas
-    );
+    let resizeTimer = null;
 
+    function scheduleResize() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(resizeCanvas, 80);
+    }
 
-    window.addEventListener(
-        "orientationchange",
-        resizeCanvas
-    );
+    window.addEventListener("resize", scheduleResize);
+    window.addEventListener("orientationchange", scheduleResize);
 
 
     resizeCanvas();
@@ -1754,16 +1755,26 @@ else {
         // A soft violet-to-pink vertical gradient reads as a clean light
         // strip rather than an arcade neon glow -- same idea as the old
         // flat cyan line, just a calmer, more polished palette.
-        const wallGradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-        wallGradient.addColorStop(0, "rgba(196, 181, 253, 0.85)");
-        wallGradient.addColorStop(0.5, "rgba(216, 180, 254, 0.6)");
-        wallGradient.addColorStop(1, "rgba(196, 181, 253, 0.85)");
+        // Cache the gradient; it only needs rebuilding when the canvas
+        // dimensions change.
+        if (
+            !draw.wallGradient ||
+            draw.wallGradientWidth !== WIDTH ||
+            draw.wallGradientHeight !== HEIGHT
+        ) {
+            draw.wallGradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+            draw.wallGradient.addColorStop(0, "rgba(196, 181, 253, 0.85)");
+            draw.wallGradient.addColorStop(0.5, "rgba(216, 180, 254, 0.6)");
+            draw.wallGradient.addColorStop(1, "rgba(196, 181, 253, 0.85)");
+            draw.wallGradientWidth = WIDTH;
+            draw.wallGradientHeight = HEIGHT;
+        }
 
         ctx.save();
-        ctx.strokeStyle = wallGradient;
+        ctx.strokeStyle = draw.wallGradient;
         ctx.lineWidth = 3;
-        ctx.shadowColor = "rgba(139, 110, 246, 0.45)";
-        ctx.shadowBlur = 8;
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
 
         ctx.beginPath();
         ctx.moveTo(1.5, 0);
@@ -1864,28 +1875,29 @@ else {
         // ----------------------------------------------------
         // BALL
         // ----------------------------------------------------
-        // Drawn as an ellipse rather than a circle because scaleX and
-        // scaleY are generally different (the screen's aspect ratio
-        // rarely matches the world's exactly) -- using ctx.arc() here
-        // would draw a circle sized only by one axis and it would drift
-        // out of sync with the ball's actual scaled hitbox on the other.
+        // Keep the ball visually round even when the canvas is scaled
+        // differently on X and Y. Use one screen-space radius based on
+        // the smaller scale so the ball remains a true circle.
 
-        const ballRx = (ball.size * scaleX) / 2;
-        const ballRy = (ball.size * scaleY) / 2;
+        const ballRadius =
+            (ball.size * Math.min(scaleX, scaleY)) / 2;
+
+        const ballCenterX =
+            ball.y * scaleX + ballRadius;
+
+        const ballCenterY =
+            perpToScreen(ball.x, ball.size * scaleY) +
+            (ball.size * scaleY) / 2;
 
         ctx.beginPath();
 
-
-        ctx.ellipse(
-            ball.y * scaleX + ballRx,
-            perpToScreen(ball.x, ball.size * scaleY) + ballRy,
-            ballRx,
-            ballRy,
-            0,
+        ctx.arc(
+            ballCenterX,
+            ballCenterY,
+            ballRadius,
             0,
             Math.PI * 2
         );
-
 
         ctx.fill();
 
@@ -1956,16 +1968,11 @@ else {
     // GAME LOOP
     // ========================================================
 
+    let animationFrameId = null;
+
     function loop() {
-
-
         draw();
-
-
-        requestAnimationFrame(
-            loop
-        );
-
+        animationFrameId = requestAnimationFrame(loop);
     }
 
 
