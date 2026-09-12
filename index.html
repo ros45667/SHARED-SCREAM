@@ -77,8 +77,7 @@
             top: 50%;
             left: 50%;
 
-            transform:
-                translate(-50%, -50%);
+            transform: translate(-50%, -50%);
 
             font-size: clamp(80px, 13vw, 230px);
 
@@ -343,6 +342,65 @@
 
 
         /* =====================================================
+           CONTROL METHOD SELECTION
+        ===================================================== */
+
+        #controlOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(5, 5, 5, 0.96);
+        }
+
+        #controlBox {
+            width: min(520px, 90vw);
+            padding: 35px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 20px;
+            background: #101010;
+            box-shadow: 0 0 50px rgba(0,255,255,0.08);
+        }
+
+        #controlBox h2 {
+            margin: 0 0 10px;
+            font-size: 30px;
+            letter-spacing: 3px;
+        }
+
+        #controlBox p {
+            margin: 0 0 25px;
+            opacity: 0.6;
+            font-size: 14px;
+        }
+
+        .control-choice {
+            width: 100%;
+            padding: 18px;
+            margin: 8px 0;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            background: #181818;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .control-choice:hover {
+            background: #242424;
+            transform: translateY(-1px);
+        }
+
+        #qrSection {
+            display: none;
+        }
+
+
+        /* =====================================================
            PHONE CONTROLLER
         ===================================================== */
 
@@ -423,132 +481,6 @@
         }
 
 
-
-        /* =====================================================
-           START / CONTROL MODE SCREEN
-        ===================================================== */
-
-        #setupPage {
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #050505;
-        }
-
-        .setup-card {
-            width: min(92vw, 620px);
-            padding: 42px;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 24px;
-            background: rgba(15,15,15,0.94);
-            box-shadow: 0 20px 80px rgba(0,0,0,0.5);
-        }
-
-        .setup-title {
-            margin: 0;
-            font-size: clamp(42px, 8vw, 78px);
-            font-weight: 900;
-            letter-spacing: 5px;
-        }
-
-        .setup-subtitle {
-            margin: 12px 0 30px;
-            opacity: 0.55;
-            letter-spacing: 2px;
-            font-size: 13px;
-        }
-
-        .setup-question {
-            margin: 0 0 18px;
-            font-size: 18px;
-        }
-
-        .setup-buttons {
-            display: flex;
-            gap: 14px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .setup-button {
-            min-width: 210px;
-            padding: 18px 22px;
-            border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 14px;
-            background: #151515;
-            color: white;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .setup-button:hover {
-            transform: translateY(-2px);
-            background: #222;
-            border-color: rgba(0,255,255,0.5);
-        }
-
-        #sideChoice {
-            display: none;
-        }
-
-        .back-button {
-            margin-top: 22px;
-            border: none;
-            background: transparent;
-            color: rgba(255,255,255,0.45);
-            cursor: pointer;
-        }
-
-        /* QR is hidden unless phone control was selected */
-        #qrSection {
-            display: none;
-        }
-
-        #qrSection.active {
-            display: block;
-        }
-
-        #qrSection.waiting {
-            transition: opacity 0.4s, transform 0.4s;
-        }
-
-        #qrSection.scanned {
-            opacity: 0;
-            transform: scale(0.85);
-            pointer-events: none;
-        }
-
-        #scanMessage {
-            margin-top: 8px;
-            font-size: 10px;
-            color: #00aa66;
-            display: none;
-        }
-
-        #qrSection.scanned #scanMessage {
-            display: block;
-        }
-
-        @media (max-width: 700px) {
-            .setup-card {
-                padding: 30px 20px;
-            }
-
-            .setup-buttons {
-                flex-direction: column;
-            }
-
-            .setup-button {
-                width: 100%;
-            }
-        }
-
     </style>
 
 </head>
@@ -557,50 +489,25 @@
 <body>
 
 
-
 <!-- =========================================================
-     START SCREEN
+     CONTROL METHOD SELECTION
 ========================================================= -->
-<div id="setupPage">
-    <div class="setup-card">
 
-        <h1 class="setup-title">SHARED SCREAM</h1>
-        <div class="setup-subtitle">A TWO-LAPTOP PONG GAME</div>
+<div id="controlOverlay">
+    <div id="controlBox">
+        <h2 id="controlTitle">SHARED SCREAM</h2>
+        <p id="controlSubtitle">How do you want to control your paddle?</p>
 
-        <div id="controlChoice">
-            <p class="setup-question">How do you want to control your paddle?</p>
+        <button class="control-choice" id="laptopControl">
+            💻 Control with this laptop
+        </button>
 
-            <div class="setup-buttons">
-                <button class="setup-button" onclick="chooseControl('laptop')">
-                    💻 PLAY ON THIS LAPTOP
-                </button>
-
-                <button class="setup-button" onclick="chooseControl('phone')">
-                    📱 USE MY PHONE
-                </button>
-            </div>
-        </div>
-
-        <div id="sideChoice">
-            <p class="setup-question">Which side is this laptop?</p>
-
-            <div class="setup-buttons">
-                <button class="setup-button" onclick="startGame('left')">
-                    ◀ LEFT — PLAYER 1
-                </button>
-
-                <button class="setup-button" onclick="startGame('right')">
-                    RIGHT — PLAYER 2 ▶
-                </button>
-            </div>
-
-            <button class="back-button" onclick="backToControlChoice()">
-                ← Back
-            </button>
-        </div>
-
+        <button class="control-choice" id="phoneControl">
+            📱 Control with your phone
+        </button>
     </div>
 </div>
+
 
 <!-- =========================================================
      LAPTOP GAME
@@ -611,9 +518,7 @@
 
     <!-- Background watermark -->
 
-    <div id="backgroundTitle">
-        SHARED SCREAM
-    </div>
+    <div id="backgroundTitle">SHARED</div>
 
 
     <!-- Connection -->
@@ -658,19 +563,9 @@
 
     <div id="qrSection">
 
-        <h3>
-            📱 PHONE CONTROL
-        </h3>
-
+        <h3>📱 PHONE CONTROL</h3>
         <div id="qrcode"></div>
-
-        <div id="qrText">
-            Scan to control your paddle
-        </div>
-
-        <div id="scanMessage">
-            ✓ PHONE CONNECTED
-        </div>
+        <div id="qrText">Scan to control your paddle</div>
 
     </div>
 
@@ -732,31 +627,6 @@
 
 
 // ============================================================
-// START SCREEN / CONTROL SELECTION
-// ============================================================
-
-let selectedControl = "laptop";
-
-function chooseControl(control) {
-    selectedControl = control;
-
-    document.getElementById("controlChoice").style.display = "none";
-    document.getElementById("sideChoice").style.display = "block";
-}
-
-function backToControlChoice() {
-    document.getElementById("sideChoice").style.display = "none";
-    document.getElementById("controlChoice").style.display = "block";
-}
-
-function startGame(side) {
-    const url =
-        `?side=${side}&control=${selectedControl}`;
-
-    window.location.href = url;
-}
-
-// ============================================================
 // URL PARAMETERS
 // ============================================================
 
@@ -769,20 +639,104 @@ const params =
 const mode =
     params.get("mode");
 
-const selectedSide =
-    params.get("side");
 
-const selectedControl =
-    params.get("control");
+// ============================================================
+// CONTROL METHOD SELECTION
+// ============================================================
+
+if (mode !== "controller") {
+
+    const side =
+        params.get("side") === "right"
+            ? "right"
+            : "left";
+
+    const myPlayer =
+        side === "left"
+            ? 1
+            : 2;
+
+    const overlay =
+        document.getElementById("controlOverlay");
+
+    const title =
+        document.getElementById("controlTitle");
+
+    const subtitle =
+        document.getElementById("controlSubtitle");
+
+    const backgroundTitle =
+        document.getElementById("backgroundTitle");
+
+    // Player 1's laptop shows SHARED.
+    // Player 2's laptop shows SCREAM.
+    backgroundTitle.textContent =
+        side === "left" ? "SHARED" : "SCREAM";
+
+    title.textContent =
+        side === "left"
+            ? "PLAYER 1 • SHARED"
+            : "PLAYER 2 • SCREAM";
+
+    subtitle.textContent =
+        "Choose how you want to control your paddle";
+
+    // Laptop keyboard mode
+    document.getElementById("laptopControl").onclick =
+        function() {
+            overlay.style.display = "none";
+            document.getElementById("qrSection").style.display = "none";
+        };
+
+    // Phone mode
+    document.getElementById("phoneControl").onclick =
+        function() {
+            overlay.style.display = "none";
+            showPhoneQR(myPlayer);
+        };
+}
 
 
-// If this is a normal fresh visit, show the setup screen.
-// A controller URL (?mode=controller) skips it.
-if (!mode && !selectedSide) {
-    document.getElementById("gamePage").style.display = "none";
-    document.getElementById("setupPage").style.display = "flex";
-} else {
-    document.getElementById("setupPage").style.display = "none";
+// ============================================================
+// PHONE QR
+// ============================================================
+
+function showPhoneQR(player) {
+
+    const qrSection =
+        document.getElementById("qrSection");
+
+    const qrContainer =
+        document.getElementById("qrcode");
+
+    const qrText =
+        document.getElementById("qrText");
+
+    qrContainer.innerHTML = "";
+
+    /*
+     * controller.html is the separate phone controller.
+     * The phone must be on the same Wi-Fi/network as the game server.
+     */
+    const controllerURL =
+        `${window.location.protocol}//` +
+        `${window.location.host}` +
+        `/controller.html?player=${player}`;
+
+    new QRCode(
+        qrContainer,
+        {
+            text: controllerURL,
+            width: 145,
+            height: 145,
+            correctLevel: QRCode.CorrectLevel.H
+        }
+    );
+
+    qrText.textContent =
+        "Scan this code with the player's phone";
+
+    qrSection.style.display = "block";
 }
 
 
@@ -855,16 +809,6 @@ if (mode === "controller") {
 
             phoneStatus.textContent =
                 "🟢 CONNECTED";
-
-            // Tell the game server that this phone has connected.
-            // If the server broadcasts this message to the display,
-            // the QR code will disappear automatically.
-            phoneSocket.send(
-                JSON.stringify({
-                    action: "controller_connected",
-                    player: Number(player)
-                })
-            );
 
         };
 
@@ -1047,11 +991,6 @@ else {
             ? 1
             : 2;
 
-    // Each laptop gets one half of the title:
-    // LEFT laptop = SHARED, RIGHT laptop = SCREAM.
-    document.getElementById("backgroundTitle").textContent =
-        side === "left" ? "SHARED" : "SCREAM";
-
 
     // --------------------------------------------------------
     // CANVAS
@@ -1121,22 +1060,6 @@ else {
 
 
     let ws;
-
-
-    function hideQRCode() {
-        const qr = document.getElementById("qrSection");
-
-        if (!qr.classList.contains("scanned")) {
-            qr.classList.add("scanned");
-
-            const scanMessage =
-                document.getElementById("scanMessage");
-
-            if (scanMessage) {
-                scanMessage.style.display = "block";
-            }
-        }
-    }
 
 
     function connect() {
@@ -1545,70 +1468,8 @@ else {
     loop();
 
 
-    // ========================================================
-    // QR CODE
-    // ========================================================
-
-    /*
-     * IMPORTANT:
-     *
-     * location.hostname is used instead of localhost.
-     *
-     * This allows a phone on the same Wi-Fi network
-     * to connect to the laptop.
-     */
-
-    const controllerURL =
-
-        `${window.location.protocol}//` +
-
-        `${window.location.hostname}` +
-
-        `${window.location.port
-            ? ":" + window.location.port
-            : ""}` +
-
-        `/?mode=controller&player=${myPlayer}`;
-
-
-    // Only show QR when the player selected phone control.
-    const qrSection = document.getElementById("qrSection");
-
-    if (selectedControl === "phone") {
-        qrSection.classList.add("active", "waiting");
-    } else {
-        qrSection.classList.remove("active");
-    }
-
-
-    new QRCode(
-
-        document.getElementById(
-            "qrcode"
-        ),
-
-        {
-
-            text: controllerURL,
-
-            width: 145,
-
-            height: 145,
-
-            correctLevel:
-                QRCode.CorrectLevel.H
-
-        }
-
-    );
-
-
-    // Show generated address
-
-    document.getElementById(
-        "qrText"
-    ).textContent =
-        controllerURL;
+    // QR code is generated only after the player chooses phone control.
+    // See showPhoneQR() near the top of this script.
 
 }
 
