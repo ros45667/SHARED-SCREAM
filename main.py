@@ -1,13 +1,30 @@
 import asyncio
+import ipaddress
 import json
 import os
 import socket
-from contextlib import asynccontextmanager
+import sys
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+
+# ==========================================
+# WINDOWS + SSL WORKAROUND
+#
+# asyncio's default event loop on Windows (ProactorEventLoop) has a known
+# bug: whenever an SSL/TLS connection is closed abruptly -- a browser tab
+# closing, a phone locking its screen, a flaky WiFi hop, or literally any
+# ordinary disconnect, not just a rejected certificate -- it logs a scary
+# "Exception in callback ... ConnectionResetError [WinError 10054]"
+# traceback to the console. It's cosmetic noise, not a real error, but it
+# drowns out logs that might actually matter. SelectorEventLoop doesn't have
+# this bug, so we switch to it on Windows before anything else starts.
+# ==========================================
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # ==========================================
 # OPTIONAL SPEED-UPS (used automatically if installed, never required)
@@ -47,6 +64,27 @@ TICK_HZ = int(os.environ.get("TICK_HZ", "60"))
 BROADCAST_HZ = int(os.environ.get("BROADCAST_HZ", str(TICK_HZ)))
 TICK_DT = 1 / TICK_HZ
 TICKS_PER_BROADCAST = max(1, round(TICK_HZ / BROADCAST_HZ))
+
+# ==========================================
+# HTTP + HTTPS, SIDE BY SIDE
+#
+# Laptops (the two displays) are served over plain HTTP on HTTP_PORT --
+# no cert warning to click through, no self-signed-cert friction.
+#
+# Phones (the controllers) need HTTPS on HTTPS_PORT, because:
+#   1. DeviceOrientation/DeviceMotion (used by controller.html's motion
+#      mode) are only exposed by phone browsers on a secure context.
+#   2. A page served over https:// is not allowed to open a plain ws://
+#      socket (mixed content) -- controller.html picks ws/wss based on
+#      the protocol it was loaded with, so it needs to be https.
+#
+# Both listeners run in the SAME process against the SAME FastAPI app,
+# so there's exactly one game_loop, one ConnectionManager, and one
+# game_state shared by every device no matter which port/protocol it
+# connected through.
+# ==========================================
+HTTP_PORT = int(os.environ.get("HTTP_PORT", "8000"))
+HTTPS_PORT = int(os.environ.get("HTTPS_PORT", "8443"))
 
 # ==========================================
 # COURT CONFIGURATION
@@ -105,6 +143,110 @@ def get_lan_ip() -> str:
         return "127.0.0.1"
     finally:
         s.close()
+
+
+def get_all_local_ips() -> List[str]:
+    """
+    Every plausible LAN-facing IPv4 address this machine currently has, not
+    just the single one get_lan_ip() guesses. On a laptop with more than one
+    active adapter (WiFi + Ethernet, a VPN, a Docker/VMware/Hyper-V virtual
+    adapter, etc), that one guess can resolve to the wrong adapter -- which
+    produces a TLS cert that doesn't cover the address other devices are
+    actually using to reach this machine. A plain HTTPS page load usually
+    still lets you click through that mismatch, but the WebSocket connection
+    the page then opens often does not get the same pass, which shows up as
+    "loads fine, then immediately disconnects and keeps retrying" instead of
+    an obvious certificate error. Covering every address we can find sidesteps
+    the guessing problem entirely.
+    """
+    ips = set()
+
+    try:
+        ips.add(get_lan_ip())
+    except Exception:
+        pass
+
+    try:
+        _, _, addrs = socket.gethostbyname_ex(socket.gethostname())
+        ips.update(addrs)
+    except Exception:
+        pass
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except Exception:
+        pass
+
+    ips.discard("127.0.0.1")
+    return sorted(ips)
+
+
+CERT_FILE = "cert.pem"
+KEY_FILE = "key.pem"
+
+
+def ensure_self_signed_cert(cert_path: str, key_path: str, lan_ips: List[str]):
+    """
+    Make sure a TLS cert/key pair exists so we can serve over HTTPS, generating
+    a throwaway self-signed one if needed. HTTPS is required here for two
+    reasons: phones only expose DeviceOrientation/DeviceMotion (used by the
+    controller's motion mode) on a secure context, and a page served over
+    https:// is not allowed to open a plain ws:// socket (mixed content).
+
+    Regenerates the cert if it's missing, expired, or doesn't cover every IP
+    this machine currently has (e.g. it joined a different network since the
+    last run, or picked up an address on a new adapter).
+    """
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        try:
+            with open(cert_path, "rb") as f:
+                existing = x509.load_pem_x509_certificate(f.read())
+            san = existing.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            covered_ips = {str(ip) for ip in san.get_values_for_type(x509.IPAddress)}
+            if set(lan_ips) <= covered_ips and existing.not_valid_after_utc > datetime.now(timezone.utc):
+                return  # existing cert is still good
+        except Exception:
+            pass  # anything wrong with the existing file -> just regenerate
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Scream Pong (dev, self-signed)")])
+
+    san_entries = [x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+    for ip in lan_ips:
+        try:
+            san_entries.append(x509.IPAddress(ipaddress.ip_address(ip)))
+        except ValueError:
+            pass
+
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(days=1))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(x509.SubjectAlternativeName(san_entries), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+
+    with open(key_path, "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+    with open(cert_path, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+    covered = ["localhost", "127.0.0.1"] + lan_ips
+    print(f"[+] Generated self-signed TLS cert covering: {', '.join(covered)} (valid 365 days) -> {cert_path}")
 
 
 class ConnectionManager:
@@ -254,31 +396,17 @@ async def game_loop():
             await asyncio.sleep(0)  # yield control back to the event loop
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    task = asyncio.create_task(game_loop())
-    lan_ip = get_lan_ip()
-    print("\n=== Scream Pong server running ===")
-    print(f"  This laptop (left court):   http://{lan_ip}:8000/?side=left")
-    print(f"  Other laptop (right court): http://{lan_ip}:8000/?side=right")
-    print(f"  Phone controller (p1):      http://{lan_ip}:8000/controller?player=1")
-    print(f"  Phone controller (p2):      http://{lan_ip}:8000/controller?player=2")
-    print("  (All devices must be on the same Wi-Fi network as this machine)")
-    print(f"  Tick rate: {TICK_HZ}Hz | Broadcast rate: {TICK_HZ / TICKS_PER_BROADCAST:.0f}Hz "
-          f"(tune with TICK_HZ / BROADCAST_HZ env vars)")
-    print(f"  uvloop: {'on' if uvloop else 'off (pip install uvloop for a speed boost)'}")
-    print()
-    yield
-    task.cancel()
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 
 @app.get("/")
 async def get_main_display():
     with open("index.html", "r", encoding="utf-8") as file:
         html_content = file.read()
+    # index.html's QR code needs to know the HTTPS port so it can build a
+    # secure URL for phones even though this page is normally loaded over
+    # plain HTTP -- see the __HTTPS_PORT__ placeholder near its <head>.
+    html_content = html_content.replace("__HTTPS_PORT__", str(HTTPS_PORT))
     return HTMLResponse(content=html_content)
 
 
@@ -296,6 +424,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_id is only used for logging -- any connection may send paddle
     commands, and the payload itself says which player it's driving:
         {"action": "up" | "down", "player": 1 | 2}
+        {"action": "set", "value": 0.0-1.0, "player": 1 | 2}
+    "up"/"down" nudge the paddle by a fixed step each message -- used by
+    the keyboard and the button controller, where holding the key/button
+    resends the same action repeatedly.
+    "set" jumps the paddle straight to an absolute position (0.0 = top of
+    its track, 1.0 = bottom) -- used by the phone's tilt controls, where
+    the tilt angle itself already represents "how far up/down", not a
+    direction to nudge in.
     This way a laptop's own keyboard AND an optional phone controller can
     both drive the same paddle without the server needing to special-case
     where the message came from.
@@ -311,20 +447,101 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
             action = msg.get("action")
             player = msg.get("player")
-            if action not in ("up", "down") or player not in (1, 2):
+            if action not in ("up", "down", "set") or player not in (1, 2):
                 continue
 
             paddle = game_state["paddles"]["p1"] if player == 1 else game_state["paddles"]["p2"]
+            max_y = CANVAS_HEIGHT - PADDLE_HEIGHT
+
             if action == "up":
                 paddle["y"] = max(0, paddle["y"] - PADDLE_SPEED)
-            else:
-                paddle["y"] = min(CANVAS_HEIGHT - PADDLE_HEIGHT, paddle["y"] + PADDLE_SPEED)
+            elif action == "down":
+                paddle["y"] = min(max_y, paddle["y"] + PADDLE_SPEED)
+            elif action == "set":
+                value = msg.get("value")
+                if not isinstance(value, (int, float)):
+                    continue
+                paddle["y"] = max(0.0, min(1.0, value)) * max_y
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
 
+def print_startup_banner(lan_ip: str, other_ips: List[str]):
+    print("\n=== Scream Pong server running (HTTP for laptops, HTTPS for phones) ===")
+    print(f"  This laptop (left court):   http://{lan_ip}:{HTTP_PORT}/?side=left")
+    print(f"  Other laptop (right court): http://{lan_ip}:{HTTP_PORT}/?side=right")
+    print(f"  Phone controller (p1):      https://{lan_ip}:{HTTPS_PORT}/controller?player=1")
+    print(f"  Phone controller (p2):      https://{lan_ip}:{HTTPS_PORT}/controller?player=2")
+    print("  (Or just scan the QR code shown on each laptop's display page --")
+    print("   it already points at the HTTPS controller URL above.)")
+    if other_ips:
+        print(f"  If a device can't connect on {lan_ip}, this machine also answers on: "
+              f"{', '.join(other_ips)} -- try one of those instead.")
+    print("  (All devices must be on the same Wi-Fi network as this machine)")
+    print("  Phones will show a security warning for the self-signed HTTPS cert --")
+    print("  click through it once (e.g. 'Advanced > Proceed'). Laptops load over")
+    print("  plain HTTP so they never see that warning at all.")
+    print(f"  Tick rate: {TICK_HZ}Hz | Broadcast rate: {TICK_HZ / TICKS_PER_BROADCAST:.0f}Hz "
+          f"(tune with TICK_HZ / BROADCAST_HZ env vars)")
+    print(f"  uvloop: {'on' if uvloop else 'off (pip install uvloop for a speed boost)'}")
+    print()
+
+
+async def main():
+    ensure_self_signed_cert(CERT_FILE, KEY_FILE, get_all_local_ips())
+
+    lan_ip = get_lan_ip()
+    other_ips = [ip for ip in get_all_local_ips() if ip != lan_ip]
+    print_startup_banner(lan_ip, other_ips)
+
+    # Started once, here -- not inside a FastAPI lifespan hook -- because
+    # the SAME `app` object below is handed to two separate uvicorn Servers.
+    # A lifespan hook fires once per listener that starts, which would spin
+    # up two competing game_loop tasks (double-speed physics, double
+    # broadcasts) if it lived on the app instead.
+    game_task = asyncio.create_task(game_loop())
+
+    # loop="asyncio" tells uvicorn to use the event loop we're already
+    # running (and the policy/uvloop we already installed above) instead of
+    # trying to set one up itself. We call server.serve() directly below
+    # (not server.run()), which never touches process signal handlers, so
+    # the two servers don't fight over SIGINT/SIGTERM; asyncio.run() still
+    # handles Ctrl+C cleanly for the whole process.
+    http_server = uvicorn.Server(uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=HTTP_PORT,
+        log_level="info",
+        access_log=True,
+        loop="asyncio",
+    ))
+    https_server = uvicorn.Server(uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=HTTPS_PORT,
+        log_level="info",
+        # Verbose on purpose right now: with access_log=True you'll see every
+        # incoming request AND any TLS handshake failure in the console (a
+        # phone that can't get past the self-signed cert never even reaches
+        # our own "[+] Client connected" print, since that only fires after a
+        # successful handshake -- these logs are what show a connection
+        # attempt that died before that point). Once things are working
+        # reliably you can drop this to log_level="warning", access_log=False
+        # to cut console I/O on weak hardware.
+        access_log=True,
+        ssl_certfile=CERT_FILE,
+        ssl_keyfile=KEY_FILE,
+        loop="asyncio",
+    ))
+
+    try:
+        await asyncio.gather(http_server.serve(), https_server.serve())
+    finally:
+        game_task.cancel()
+
+
 if __name__ == "__main__":
-    print("Host loaded at http://localhost:8000/")
-    # access_log=False and a quieter log level cut down on console I/O,
-    # which is a real (if small) CPU cost on weak hardware under load.
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning", access_log=False)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
