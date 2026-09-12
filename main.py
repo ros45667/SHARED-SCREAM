@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import socket
 from contextlib import asynccontextmanager
 from typing import List
@@ -7,6 +8,45 @@ from typing import List
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+
+# ==========================================
+# OPTIONAL SPEED-UPS (used automatically if installed, never required)
+#
+# uvloop swaps in a much faster event loop (Linux/macOS only).
+# orjson serializes the game state noticeably faster than stdlib json.
+# Both fall back silently if not installed, so low-end machines without
+# them still work -- they just get a smaller speed boost.
+# ==========================================
+try:
+    import uvloop
+    uvloop.install()
+except ImportError:
+    uvloop = None
+
+try:
+    import orjson
+
+    def dumps(obj) -> str:
+        return orjson.dumps(obj).decode("utf-8")
+except ImportError:
+    def dumps(obj) -> str:
+        # separators=(",", ":") strips the default spaces -> smaller payload,
+        # less to serialize and less to push over (possibly weak) Wi-Fi.
+        return json.dumps(obj, separators=(",", ":"))
+
+
+# ==========================================
+# PERFORMANCE TUNING (override via environment variables, no code edits needed)
+#
+# On a low-end machine, try:  BROADCAST_HZ=20 python main.py
+# That keeps physics accurate at 60Hz but only sends network updates
+# 20x/sec, which is usually the actual bottleneck on weak CPUs/Wi-Fi --
+# not the physics math itself.
+# ==========================================
+TICK_HZ = int(os.environ.get("TICK_HZ", "60"))
+BROADCAST_HZ = int(os.environ.get("BROADCAST_HZ", str(TICK_HZ)))
+TICK_DT = 1 / TICK_HZ
+TICKS_PER_BROADCAST = max(1, round(TICK_HZ / BROADCAST_HZ))
 
 # ==========================================
 # COURT CONFIGURATION
@@ -42,6 +82,18 @@ game_state = {
     "score": {"p1": 0, "p2": 0},
 }
 
+# Reused every broadcast instead of allocating a fresh dict each tick.
+# Coordinates are rounded to whole pixels for the wire -- the client only
+# ever draws integer pixels anyway, and shorter numbers serialize faster
+# and take less bandwidth than raw floats like 505.32999999999993.
+_wire = {
+    "court": game_state["court"],
+    "ball": {"x": 0, "y": 0, "size": BALL_SIZE},
+    "paddles": {"p1": {"x": PADDLE1_X, "y": 0}, "p2": {"x": PADDLE2_X, "y": 0}},
+    "paddle_size": game_state["paddle_size"],
+    "score": game_state["score"],
+}
+
 
 def get_lan_ip() -> str:
     """Best-effort guess at this machine's LAN IP (no packets actually sent)."""
@@ -69,11 +121,28 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
             print(f"[-] Client disconnected. Total active clients: {len(self.active_connections)}")
 
-    async def broadcast(self, message: str):
+    async def _send_one(self, connection: WebSocket, message: str):
+        try:
+            # A slow/stalled client shouldn't be able to hold up everyone
+            # else -- give it a short timeout and drop it if it can't keep up.
+            await asyncio.wait_for(connection.send_text(message), timeout=0.5)
+        except Exception:
+            self.disconnect(connection)
+
+    def broadcast_nowait(self, message: str):
+        """
+        Fire-and-forget broadcast. This is the key fix for lag: the old
+        version used `await asyncio.gather(...)`, which meant the physics
+        loop had to wait for EVERY connected client's send to finish before
+        it could step forward again -- so one laggy device stalled the
+        game for everyone. Scheduling each send as its own task lets the
+        physics loop keep ticking at full speed regardless of network
+        conditions on any individual client.
+        """
         if not self.active_connections:
             return
-        tasks = [connection.send_text(message) for connection in self.active_connections]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        for connection in list(self.active_connections):
+            asyncio.create_task(self._send_one(connection, message))
 
 
 manager = ConnectionManager()
@@ -87,57 +156,102 @@ def reset_ball(serve_towards: int = 1):
     game_state["ball"]["vy"] = 5 if game_state["ball"]["vy"] >= 0 else -5
 
 
+def step_physics():
+    ball = game_state["ball"]
+    p1 = game_state["paddles"]["p1"]
+    p2 = game_state["paddles"]["p2"]
+
+    # Move ball
+    ball["x"] += ball["vx"]
+    ball["y"] += ball["vy"]
+
+    # Bounce off top & bottom of the court
+    if ball["y"] <= 0:
+        ball["y"] = 0
+        ball["vy"] *= -1
+    elif ball["y"] >= CANVAS_HEIGHT - BALL_SIZE:
+        ball["y"] = CANVAS_HEIGHT - BALL_SIZE
+        ball["vy"] *= -1
+
+    # Paddle 1 collision (left wall of the court)
+    if (
+        ball["vx"] < 0
+        and ball["x"] <= p1["x"] + PADDLE_WIDTH
+        and ball["x"] + BALL_SIZE >= p1["x"]
+        and ball["y"] + BALL_SIZE >= p1["y"]
+        and ball["y"] <= p1["y"] + PADDLE_HEIGHT
+    ):
+        ball["x"] = p1["x"] + PADDLE_WIDTH
+        ball["vx"] *= -1
+
+    # Paddle 2 collision (right wall of the court)
+    if (
+        ball["vx"] > 0
+        and ball["x"] + BALL_SIZE >= p2["x"]
+        and ball["x"] <= p2["x"] + PADDLE_WIDTH
+        and ball["y"] + BALL_SIZE >= p2["y"]
+        and ball["y"] <= p2["y"] + PADDLE_HEIGHT
+    ):
+        ball["x"] = p2["x"] - BALL_SIZE
+        ball["vx"] *= -1
+
+    # Scoring -- ball passed a paddle and left the court entirely
+    if ball["x"] < 0:
+        game_state["score"]["p2"] += 1
+        reset_ball(serve_towards=1)
+    elif ball["x"] > COURT_WIDTH:
+        game_state["score"]["p1"] += 1
+        reset_ball(serve_towards=2)
+
+
+def build_wire_message() -> str:
+    """Round to whole pixels into the reused _wire dict, then serialize once."""
+    ball = game_state["ball"]
+    p1 = game_state["paddles"]["p1"]
+    p2 = game_state["paddles"]["p2"]
+
+    wb = _wire["ball"]
+    wb["x"] = int(ball["x"])
+    wb["y"] = int(ball["y"])
+
+    _wire["paddles"]["p1"]["y"] = int(p1["y"])
+    _wire["paddles"]["p2"]["y"] = int(p2["y"])
+
+    return dumps(_wire)
+
+
 async def game_loop():
-    """Authoritative 60 Hz physics loop. This is the ONLY place game state changes."""
+    """
+    Authoritative physics loop, ticking at TICK_HZ. This is the ONLY place
+    game state changes. Broadcasting is decoupled (see TICKS_PER_BROADCAST)
+    so you can keep smooth 60Hz physics while sending fewer, cheaper
+    updates over the network on constrained hardware.
+    """
+    loop = asyncio.get_event_loop()
+    next_tick = loop.time()
+    tick_count = 0
+
     while True:
-        ball = game_state["ball"]
-        p1 = game_state["paddles"]["p1"]
-        p2 = game_state["paddles"]["p2"]
+        step_physics()
+        tick_count += 1
 
-        # Move ball
-        ball["x"] += ball["vx"]
-        ball["y"] += ball["vy"]
+        if tick_count % TICKS_PER_BROADCAST == 0:
+            manager.broadcast_nowait(build_wire_message())
 
-        # Bounce off top & bottom of the court
-        if ball["y"] <= 0:
-            ball["y"] = 0
-            ball["vy"] *= -1
-        elif ball["y"] >= CANVAS_HEIGHT - BALL_SIZE:
-            ball["y"] = CANVAS_HEIGHT - BALL_SIZE
-            ball["vy"] *= -1
-
-        # Paddle 1 collision (left wall of the court)
-        if (
-            ball["vx"] < 0
-            and ball["x"] <= p1["x"] + PADDLE_WIDTH
-            and ball["x"] + BALL_SIZE >= p1["x"]
-            and ball["y"] + BALL_SIZE >= p1["y"]
-            and ball["y"] <= p1["y"] + PADDLE_HEIGHT
-        ):
-            ball["x"] = p1["x"] + PADDLE_WIDTH
-            ball["vx"] *= -1
-
-        # Paddle 2 collision (right wall of the court)
-        if (
-            ball["vx"] > 0
-            and ball["x"] + BALL_SIZE >= p2["x"]
-            and ball["x"] <= p2["x"] + PADDLE_WIDTH
-            and ball["y"] + BALL_SIZE >= p2["y"]
-            and ball["y"] <= p2["y"] + PADDLE_HEIGHT
-        ):
-            ball["x"] = p2["x"] - BALL_SIZE
-            ball["vx"] *= -1
-
-        # Scoring -- ball passed a paddle and left the court entirely
-        if ball["x"] < 0:
-            game_state["score"]["p2"] += 1
-            reset_ball(serve_towards=1)
-        elif ball["x"] > COURT_WIDTH:
-            game_state["score"]["p1"] += 1
-            reset_ball(serve_towards=2)
-
-        await manager.broadcast(json.dumps(game_state))
-        await asyncio.sleep(1 / 60)
+        # Schedule the next tick relative to a fixed clock instead of just
+        # sleeping TICK_DT after finishing work. This prevents drift from
+        # accumulating on a slow CPU (each tick creeping later than the
+        # last) instead of just running a bit slow but steadily.
+        next_tick += TICK_DT
+        delay = next_tick - loop.time()
+        if delay > 0:
+            await asyncio.sleep(delay)
+        else:
+            # We've fallen behind -- don't try to "catch up" with a burst
+            # of instant ticks (that would spike CPU further on hardware
+            # that's already struggling). Just resync to now and continue.
+            next_tick = loop.time()
+            await asyncio.sleep(0)  # yield control back to the event loop
 
 
 @asynccontextmanager
@@ -149,7 +263,11 @@ async def lifespan(app: FastAPI):
     print(f"  Other laptop (right court): http://{lan_ip}:8000/?side=right")
     print(f"  Phone controller (p1):      http://{lan_ip}:8000/controller?player=1")
     print(f"  Phone controller (p2):      http://{lan_ip}:8000/controller?player=2")
-    print("  (All devices must be on the same Wi-Fi network as this machine)\n")
+    print("  (All devices must be on the same Wi-Fi network as this machine)")
+    print(f"  Tick rate: {TICK_HZ}Hz | Broadcast rate: {TICK_HZ / TICKS_PER_BROADCAST:.0f}Hz "
+          f"(tune with TICK_HZ / BROADCAST_HZ env vars)")
+    print(f"  uvloop: {'on' if uvloop else 'off (pip install uvloop for a speed boost)'}")
+    print()
     yield
     task.cancel()
 
@@ -207,4 +325,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 if __name__ == "__main__":
     print("Host loaded at http://localhost:8000/")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # access_log=False and a quieter log level cut down on console I/O,
+    # which is a real (if small) CPU cost on weak hardware under load.
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning", access_log=False)
