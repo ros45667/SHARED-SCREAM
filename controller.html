@@ -4,47 +4,330 @@
     <title>Pong - Controller</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-        body { background: #000; color: #eee; font-family: monospace; display: flex;
-               flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        button { width: 150px; height: 100px; font-size: 22px; margin: 10px; touch-action: manipulation; }
-        #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-size: 14px; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background: #000; color: #eee; font-family: -apple-system, Arial, sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; margin: 0; padding: 16px; text-align: center; overflow: hidden;
+            transition: background-color 120ms ease-out;
+        }
+
+        h2 { margin: 4px 0 20px; }
+
+        #status {
+            position: fixed; top: 10px; left: 10px; color: #0f0; font-size: 13px; font-family: monospace;
+        }
+
+        .screen { display: none; width: 100%; max-width: 360px; }
+        .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+        /* ---- Mode select ---- */
+        .mode-btn {
+            width: 100%; padding: 22px; margin: 10px 0; font-size: 19px; border-radius: 14px;
+            border: 2px solid #444; background: #151515; color: #eee;
+        }
+        .mode-btn:active { background: #222; }
+        .mode-btn .sub { display: block; font-size: 13px; color: #999; margin-top: 6px; font-weight: normal; }
+
+        /* ---- Button mode ---- */
+        button.control {
+            width: 160px; height: 90px; font-size: 22px; margin: 10px; border-radius: 12px;
+            border: none; background: #2a2a2a; color: #eee; touch-action: none;
+        }
+        button.control:active { background: #3a3a3a; }
+
+        /* ---- Motion mode ---- */
+        #tiltTrack {
+            position: relative; width: 60px; height: 260px; background: #151515;
+            border-radius: 30px; border: 2px solid #333; margin: 20px 0; overflow: hidden;
+        }
+        #tiltPuck {
+            position: absolute; left: 5px; width: 50px; height: 50px; border-radius: 50%;
+            background: #0af; transition: background-color 120ms ease-out;
+        }
+        #tiltPuck.flash { background: #ff9900; }
+
+        #swingMeter {
+            width: 100%; height: 10px; background: #151515; border-radius: 5px; overflow: hidden; margin-bottom: 8px;
+        }
+        #swingMeterFill { height: 100%; width: 0%; background: #0af; }
+
+        .hint { font-size: 14px; color: #999; margin-top: 8px; line-height: 1.5; }
+        .warn { font-size: 13px; color: #ffb300; margin-top: 10px; line-height: 1.4; }
+
+        .link-btn { background: none; border: none; color: #0af; font-size: 14px; margin-top: 22px; padding: 10px; }
     </style>
 </head>
-<body>
+<body id="body">
     <div id="status">connecting...</div>
-    <h2 id="title">Controller</h2>
-    <button id="up">UP</button>
-    <button id="down">DOWN</button>
+
+    <!-- ============================================================
+         SCREEN 1: MODE SELECT
+    ============================================================= -->
+    <div id="screen-select" class="screen active">
+        <h2 id="titleSelect">Controller</h2>
+        <button class="mode-btn" id="pickButtons">
+            🕹️ Button Controls
+            <span class="sub">Tap UP / DOWN to move your paddle</span>
+        </button>
+        <button class="mode-btn" id="pickMotion">
+            📱 Motion Controls
+            <span class="sub">Tilt to move, swing your phone to hit</span>
+        </button>
+    </div>
+
+    <!-- ============================================================
+         SCREEN 2: BUTTON MODE
+    ============================================================= -->
+    <div id="screen-buttons" class="screen">
+        <h2 id="titleButtons">Controller</h2>
+        <button class="control" id="up">UP</button>
+        <button class="control" id="down">DOWN</button>
+        <button class="link-btn" data-back>⟵ Change control mode</button>
+    </div>
+
+    <!-- ============================================================
+         SCREEN 3: MOTION MODE
+    ============================================================= -->
+    <div id="screen-motion" class="screen">
+        <h2 id="titleMotion">Controller</h2>
+
+        <div id="motionPrompt">
+            <p class="hint">Motion controls need permission to read your phone's sensors.</p>
+            <button class="mode-btn" id="enableMotion">Enable Motion Controls</button>
+            <p class="warn" id="secureWarning" style="display:none;">
+                ⚠️ This page isn't loaded over HTTPS. Some phone browsers block motion
+                sensors on plain http:// connections — if nothing happens after tapping
+                Enable, try serving the app over HTTPS.
+            </p>
+            <button class="link-btn" data-back>⟵ Change control mode</button>
+        </div>
+
+        <div id="motionActive" style="display:none;">
+            <div id="swingMeter"><div id="swingMeterFill"></div></div>
+            <p class="hint" style="margin-top:0;">swing power</p>
+
+            <div id="tiltTrack"><div id="tiltPuck"></div></div>
+
+            <p class="hint">Tilt the phone up/down to move your paddle.<br>Swing it sharply to hit the ball with power.</p>
+
+            <button class="link-btn" id="recalibrate">🎯 Recalibrate center</button>
+            <button class="link-btn" data-back>⟵ Change control mode</button>
+        </div>
+    </div>
 
     <script>
-        // Use ?player=1 or ?player=2 to pick which paddle this controls.
+        // ==========================================
+        // SETUP
+        // ==========================================
         const params = new URLSearchParams(window.location.search);
         const player = params.get("player") === "2" ? 2 : 1;
-        document.getElementById("title").textContent = `Controller (player ${player})`;
+        document.querySelectorAll("#titleSelect, #titleButtons, #titleMotion").forEach(el => {
+            el.textContent = `Controller (player ${player})`;
+        });
 
-        const status = document.getElementById('status');
+        const statusEl = document.getElementById("status");
+        const bodyEl = document.getElementById("body");
         let ws;
 
         function connect() {
-            ws = new WebSocket(`ws://${location.host}/ws/controller-${player}`);
-            ws.onopen = () => { status.textContent = 'connected'; };
-            ws.onclose = () => { status.textContent = 'disconnected — retrying...'; setTimeout(connect, 1000); };
+            const wsScheme = location.protocol === "https:" ? "wss" : "ws";
+            ws = new WebSocket(`${wsScheme}://${location.host}/ws/controller-${player}`);
+            ws.onopen = () => { statusEl.textContent = "connected"; };
+            ws.onclose = () => { statusEl.textContent = "disconnected — retrying..."; setTimeout(connect, 1000); };
             ws.onerror = () => ws.close();
         }
         connect();
 
-        function send(direction) {
+        function sendMsg(obj) {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: direction, player }));
+                ws.send(JSON.stringify(Object.assign({ player }, obj)));
             }
         }
 
-        document.getElementById('up').addEventListener('click', () => send('up'));
-        document.getElementById('down').addEventListener('click', () => send('down'));
+        // ==========================================
+        // SCREEN SWITCHING
+        // ==========================================
+        const screens = {
+            select: document.getElementById("screen-select"),
+            buttons: document.getElementById("screen-buttons"),
+            motion: document.getElementById("screen-motion"),
+        };
+        function showScreen(name) {
+            Object.values(screens).forEach(s => s.classList.remove("active"));
+            screens[name].classList.add("active");
+        }
+        document.querySelectorAll("[data-back]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                stopAllHolds();
+                showScreen("select");
+            });
+        });
 
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') send('up');
-            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') send('down');
+        // ==========================================
+        // BUTTON MODE
+        // ==========================================
+        document.getElementById("pickButtons").addEventListener("click", () => showScreen("buttons"));
+
+        // Holding UP/DOWN moves continuously: fire once immediately (so a quick
+        // tap still registers), then keep resending at a fixed rate for as long
+        // as the button/key stays down. One interval per action so holding both
+        // at once (or a key + a button) doesn't clobber each other.
+        const HOLD_REPEAT_MS = 1000 / 30;
+        const holdIntervals = {};
+
+        function startHold(action) {
+            if (holdIntervals[action]) return; // already repeating
+            sendMsg({ action });
+            holdIntervals[action] = setInterval(() => sendMsg({ action }), HOLD_REPEAT_MS);
+        }
+        function stopHold(action) {
+            if (holdIntervals[action]) {
+                clearInterval(holdIntervals[action]);
+                delete holdIntervals[action];
+            }
+        }
+        function stopAllHolds() {
+            Object.keys(holdIntervals).forEach(stopHold);
+        }
+
+        function bindHoldButton(btn, action) {
+            btn.addEventListener("pointerdown", (e) => {
+                e.preventDefault();
+                btn.setPointerCapture(e.pointerId);
+                startHold(action);
+            });
+            btn.addEventListener("pointerup", () => stopHold(action));
+            btn.addEventListener("pointercancel", () => stopHold(action));
+        }
+        bindHoldButton(document.getElementById("up"), "up");
+        bindHoldButton(document.getElementById("down"), "down");
+
+        window.addEventListener("keydown", (e) => {
+            if (!screens.buttons.classList.contains("active")) return;
+            if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") startHold("up");
+            if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") startHold("down");
+        });
+        window.addEventListener("keyup", (e) => {
+            if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") stopHold("up");
+            if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") stopHold("down");
+        });
+
+        // Don't leave a paddle stuck moving if focus/visibility is lost mid-hold,
+        // or if the user backs out of the button screen while still pressing.
+        window.addEventListener("blur", stopAllHolds);
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) stopAllHolds();
+        });
+
+        // ==========================================
+        // MOTION MODE
+        // ==========================================
+        document.getElementById("pickMotion").addEventListener("click", () => {
+            showScreen("motion");
+            if (!window.isSecureContext) {
+                document.getElementById("secureWarning").style.display = "block";
+            }
+        });
+
+        const TILT_RANGE_DEG = 40;     // full tilt range mapped to top..bottom of paddle
+        const HIT_JERK_THRESHOLD = 9;  // m/s^2 sudden spike needed to count as a "swing"
+        const HIT_JERK_MAX = 28;       // spike magnitude that counts as a full-power (1.0) swing
+        const HIT_COOLDOWN_MS = 250;   // minimum time between two swings
+        const ORIENTATION_SEND_INTERVAL_MS = 1000 / 20; // throttle position updates to 20Hz
+
+        let baselineBeta = null;
+        let latestBeta = null;
+        let lastOrientationSend = 0;
+
+        let smoothedMag = null;
+        let lastHitTime = 0;
+
+        const tiltPuck = document.getElementById("tiltPuck");
+        const tiltTrack = document.getElementById("tiltTrack");
+        const swingFill = document.getElementById("swingMeterFill");
+
+        function updateTiltUI(normalized) {
+            const trackHeight = tiltTrack.clientHeight - tiltPuck.clientHeight;
+            tiltPuck.style.top = `${normalized * trackHeight}px`;
+        }
+
+        function handleOrientation(event) {
+            if (event.beta === null || event.beta === undefined) return;
+            latestBeta = event.beta;
+            if (baselineBeta === null) baselineBeta = event.beta;
+
+            const now = performance.now();
+            if (now - lastOrientationSend < ORIENTATION_SEND_INTERVAL_MS) return;
+            lastOrientationSend = now;
+
+            const delta = event.beta - baselineBeta; // tilt forward (away from body) = negative-going in most holds
+            let normalized = 0.5 - (delta / TILT_RANGE_DEG) * 0.5;
+            normalized = Math.max(0, Math.min(1, normalized));
+
+            updateTiltUI(normalized);
+            sendMsg({ action: "set", value: normalized });
+        }
+
+        function flashHit() {
+            tiltPuck.classList.add("flash");
+            bodyEl.style.backgroundColor = "#221a00";
+            setTimeout(() => {
+                tiltPuck.classList.remove("flash");
+                bodyEl.style.backgroundColor = "#000";
+            }, 180);
+            if (navigator.vibrate) navigator.vibrate(40);
+        }
+
+        function handleMotion(event) {
+            const raw = (event.acceleration && event.acceleration.x !== null)
+                ? event.acceleration
+                : event.accelerationIncludingGravity;
+            if (!raw || raw.x === null || raw.x === undefined) return;
+
+            const mag = Math.sqrt((raw.x || 0) ** 2 + (raw.y || 0) ** 2 + (raw.z || 0) ** 2);
+            if (smoothedMag === null) smoothedMag = mag;
+
+            const jerk = mag - smoothedMag; // sudden spike above the slow-moving baseline = a swing
+            smoothedMag = smoothedMag * 0.9 + mag * 0.1;
+
+            swingFill.style.width = `${Math.min(100, Math.max(0, (jerk / HIT_JERK_MAX) * 100))}%`;
+
+            const now = performance.now();
+            if (jerk > HIT_JERK_THRESHOLD && now - lastHitTime > HIT_COOLDOWN_MS) {
+                lastHitTime = now;
+                const power = Math.min(1, jerk / HIT_JERK_MAX);
+                sendMsg({ action: "hit", power });
+                flashHit();
+            }
+        }
+
+        async function enableMotion() {
+            try {
+                if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+                    const perm = await DeviceMotionEvent.requestPermission();
+                    if (perm !== "granted") { alert("Motion permission denied."); return; }
+                }
+                if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+                    const perm = await DeviceOrientationEvent.requestPermission();
+                    if (perm !== "granted") { alert("Orientation permission denied."); return; }
+                }
+            } catch (err) {
+                alert("Couldn't get sensor permission: " + err);
+                return;
+            }
+
+            window.addEventListener("deviceorientation", handleOrientation);
+            window.addEventListener("devicemotion", handleMotion);
+
+            document.getElementById("motionPrompt").style.display = "none";
+            document.getElementById("motionActive").style.display = "block";
+        }
+
+        document.getElementById("enableMotion").addEventListener("click", enableMotion);
+        document.getElementById("recalibrate").addEventListener("click", () => {
+            if (latestBeta !== null) baselineBeta = latestBeta;
         });
     </script>
 </body>
