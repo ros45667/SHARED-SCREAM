@@ -1,189 +1,1038 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
     <title>Scream Pong</title>
 
+    <!-- QR CODE LIBRARY -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <style>
-        * { box-sizing: border-box; }
+
+        * {
+            box-sizing: border-box;
+        }
 
         body {
             margin: 0;
-            background: #111;
+            background: #080808;
             color: white;
             font-family: Arial, sans-serif;
+
+            min-height: 100vh;
+
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
+
+            overflow: hidden;
         }
 
-        h1 { margin-bottom: 10px; }
+        /* ================================
+           TITLE
+        ================================= */
 
-        #gameCanvas {
-            background: black;
-            border: 3px solid white;
+        h1 {
+            font-size: 42px;
+            margin: 5px 0 10px;
+            letter-spacing: 2px;
         }
 
-        /* Highlight which outer edge the ball can leave from on this screen */
-        #gameCanvas.side-left { border-right-style: dashed; border-right-color: #0ff; }
-        #gameCanvas.side-right { border-left-style: dashed; border-left-color: #0ff; }
-
-        .instructions {
-            margin-top: 15px;
-            text-align: center;
-            font-size: 18px;
-        }
-
-        .score { font-size: 30px; margin-bottom: 10px; }
+        /* ================================
+           STATUS
+        ================================= */
 
         #status {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            font-size: 14px;
+            top: 15px;
+            left: 15px;
+
+            font-size: 15px;
             font-family: monospace;
         }
-        #status.connected { color: #0f0; }
-        #status.disconnected { color: #f33; }
+
+        #status.connected {
+            color: #00ff66;
+        }
+
+        #status.disconnected {
+            color: #ff3333;
+        }
+
+        /* ================================
+           SCORE
+        ================================= */
+
+        .score {
+            font-size: 50px;
+            font-weight: bold;
+
+            margin-bottom: 10px;
+        }
+
+        /* ================================
+           GAME CANVAS
+        ================================= */
+
+        #gameCanvas {
+
+            background: black;
+
+            /*
+             * Larger actual game world
+             */
+            width: 90vw;
+            height: 70vh;
+
+            max-width: 1400px;
+            max-height: 800px;
+
+            border: 4px solid white;
+
+            display: block;
+        }
+
+        /* Highlight outer edge */
+
+        #gameCanvas.side-left {
+
+            border-right-style: dashed;
+            border-right-color: cyan;
+        }
+
+        #gameCanvas.side-right {
+
+            border-left-style: dashed;
+            border-left-color: cyan;
+        }
+
+        /* ================================
+           INSTRUCTIONS
+        ================================= */
+
+        .instructions {
+
+            margin-top: 10px;
+
+            text-align: center;
+
+            font-size: 18px;
+
+            color: #cccccc;
+        }
+
+        /* ================================
+           QR SECTION
+        ================================= */
+
+        #qrSection {
+
+            position: fixed;
+
+            right: 20px;
+            bottom: 20px;
+
+            background: white;
+
+            color: black;
+
+            padding: 15px;
+
+            border-radius: 12px;
+
+            text-align: center;
+
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+
+            z-index: 10;
+        }
+
+        #qrSection h3 {
+
+            margin: 0 0 8px;
+
+            font-size: 16px;
+        }
+
+        #qrcode {
+
+            width: 150px;
+            height: 150px;
+
+            margin: auto;
+        }
+
+        #qrText {
+
+            margin-top: 8px;
+
+            font-size: 11px;
+
+            max-width: 160px;
+
+            word-break: break-all;
+        }
+
+        /* ================================
+           PHONE CONTROLLER
+        ================================= */
+
+        #controller {
+
+            display: none;
+
+            width: 100vw;
+            height: 100vh;
+
+            background: #080808;
+
+            flex-direction: column;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 25px;
+        }
+
+        #controller h1 {
+
+            font-size: 35px;
+        }
+
+        .controller-info {
+
+            font-size: 20px;
+        }
+
+        .control-button {
+
+            width: 80vw;
+            max-width: 400px;
+
+            height: 130px;
+
+            font-size: 55px;
+
+            border: none;
+
+            border-radius: 25px;
+
+            background: #222;
+
+            color: white;
+
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+
+            touch-action: none;
+
+            user-select: none;
+        }
+
+        .control-button:active {
+
+            background: #00aaaa;
+
+            transform: scale(0.97);
+        }
+
+        #phoneStatus {
+
+            font-family: monospace;
+
+            color: #00ff66;
+        }
+
     </style>
+
 </head>
+
 
 <body>
 
-    <div id="status">connecting...</div>
 
-    <h1>🎮 SCREAM PONG <span id="sideLabel"></span> 🎮</h1>
+<!-- =====================================================
+     GAME DISPLAY
+===================================================== -->
 
-    <div class="score">
-        <span id="score1">0</span>
-        &nbsp;&nbsp;&nbsp;
-        <span id="score2">0</span>
+<div id="gamePage">
+
+    <div id="status">
+        connecting...
     </div>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-    <div class="instructions" id="instructions"></div>
+    <h1>
+        🎮 SCREAM PONG
+        <span id="sideLabel"></span>
+    </h1>
 
-    <script>
-        // ==========================================
-        // SIDE / SCREEN SETUP
-        // Which half of the shared court this screen renders.
-        // Use ?side=left or ?side=right in the URL.
-        // ==========================================
-        const params = new URLSearchParams(window.location.search);
-        const side = params.get("side") === "right" ? "right" : "left";
-        const myPlayer = side === "left" ? 1 : 2;
 
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        canvas.classList.add(side === "left" ? "side-left" : "side-right");
+    <div class="score">
 
-        const WIDTH = canvas.width;   // this screen's own pixel width
-        const HEIGHT = canvas.height;
+        <span id="score1">0</span>
 
-        document.getElementById("sideLabel").textContent =
-            side === "left" ? "(Left Court)" : "(Right Court)";
-        document.getElementById("instructions").textContent =
-            `Player ${myPlayer} keyboard: W / S or ↑ / ↓  —  ball crosses over to the other laptop's screen`;
+        &nbsp;&nbsp;&nbsp;
 
-        // xOffset converts a WORLD x-coordinate (0..courtWidth) into a
-        // LOCAL x-coordinate for drawing on this screen's canvas.
-        let xOffset = side === "left" ? 0 : WIDTH;
+        <span id="score2">0</span>
 
-        // ==========================================
-        // LATEST STATE FROM SERVER (authoritative)
-        // ==========================================
-        let latest = null;
+    </div>
 
-        // ==========================================
-        // WEBSOCKET
-        // ==========================================
-        const statusEl = document.getElementById("status");
-        let ws;
 
-        function connect() {
-            ws = new WebSocket(`ws://${location.host}/ws/display-${side}`);
+    <canvas
+        id="gameCanvas"
+        width="1200"
+        height="700">
+    </canvas>
 
-            ws.onopen = () => {
-                statusEl.textContent = `connected (player ${myPlayer})`;
-                statusEl.className = "connected";
-            };
-            ws.onclose = () => {
-                statusEl.textContent = "disconnected — retrying...";
-                statusEl.className = "disconnected";
-                setTimeout(connect, 1000);
-            };
-            ws.onerror = () => ws.close();
 
-            ws.onmessage = (event) => {
-                latest = JSON.parse(event.data);
-                if (latest.court && latest.court.screen_width) {
-                    xOffset = side === "left" ? 0 : latest.court.screen_width;
-                }
-                document.getElementById("score1").textContent = latest.score.p1;
-                document.getElementById("score2").textContent = latest.score.p2;
-            };
+    <div
+        class="instructions"
+        id="instructions">
+    </div>
+
+
+    <!-- QR CODE -->
+
+    <div id="qrSection">
+
+        <h3>
+            📱 Scan to Control
+        </h3>
+
+        <div id="qrcode"></div>
+
+        <div id="qrText">
+            Scan this QR code with your phone
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     PHONE CONTROLLER
+===================================================== -->
+
+<div id="controller">
+
+    <h1>
+        🎮 PONG CONTROLLER
+    </h1>
+
+    <div class="controller-info">
+
+        <span id="phonePlayer">
+            Player
+        </span>
+
+    </div>
+
+    <div id="phoneStatus">
+        Connecting...
+    </div>
+
+
+    <button
+        class="control-button"
+        id="upButton">
+
+        ⬆️
+
+    </button>
+
+
+    <button
+        class="control-button"
+        id="downButton">
+
+        ⬇️
+
+    </button>
+
+</div>
+
+
+
+<script>
+
+
+// ======================================================
+// DETERMINE MODE
+// ======================================================
+
+const params =
+    new URLSearchParams(window.location.search);
+
+const mode =
+    params.get("mode");
+
+
+// ======================================================
+// PHONE CONTROLLER MODE
+// ======================================================
+
+if (mode === "controller") {
+
+    /*
+     * Hide the actual game.
+     */
+
+    document.getElementById("gamePage").style.display =
+        "none";
+
+    /*
+     * Show phone controller.
+     */
+
+    document.getElementById("controller").style.display =
+        "flex";
+
+
+    // --------------------------------------------------
+    // Which player?
+    // --------------------------------------------------
+
+    let player =
+        params.get("player");
+
+    if (player !== "2") {
+        player = "1";
+    }
+
+    document.getElementById("phonePlayer").textContent =
+        "Player " + player;
+
+
+    // --------------------------------------------------
+    // WebSocket
+    // --------------------------------------------------
+
+    const phoneStatus =
+        document.getElementById("phoneStatus");
+
+    let phoneSocket;
+
+
+    function connectPhone() {
+
+        /*
+         * Connect to the same server that
+         * delivered this webpage.
+         */
+
+        phoneSocket =
+            new WebSocket(
+                `ws://${location.host}/ws/controller-${player}`
+            );
+
+
+        phoneSocket.onopen = function() {
+
+            phoneStatus.textContent =
+                "🟢 Connected";
+
+        };
+
+
+        phoneSocket.onclose = function() {
+
+            phoneStatus.textContent =
+                "🔴 Disconnected — reconnecting...";
+
+            setTimeout(
+                connectPhone,
+                1000
+            );
+
+        };
+
+
+        phoneSocket.onerror = function() {
+
+            phoneSocket.close();
+
+        };
+
+    }
+
+
+    connectPhone();
+
+
+    // --------------------------------------------------
+    // SEND COMMAND
+    // --------------------------------------------------
+
+    function sendCommand(action) {
+
+        if (
+            phoneSocket &&
+            phoneSocket.readyState === WebSocket.OPEN
+        ) {
+
+            phoneSocket.send(
+
+                JSON.stringify({
+
+                    action: action,
+
+                    player: Number(player)
+
+                })
+
+            );
+
         }
 
-        connect();
+    }
 
-        function send(action) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action, player: myPlayer }));
+
+    // --------------------------------------------------
+    // BUTTON CONTROL
+    // --------------------------------------------------
+
+    const upButton =
+        document.getElementById("upButton");
+
+    const downButton =
+        document.getElementById("downButton");
+
+
+    /*
+     * UP
+     */
+
+    upButton.addEventListener(
+        "touchstart",
+        function(e) {
+
+            e.preventDefault();
+
+            sendCommand("up");
+
+        }
+    );
+
+
+    upButton.addEventListener(
+        "touchend",
+        function(e) {
+
+            e.preventDefault();
+
+            sendCommand("stop");
+
+        }
+    );
+
+
+    /*
+     * DOWN
+     */
+
+    downButton.addEventListener(
+        "touchstart",
+        function(e) {
+
+            e.preventDefault();
+
+            sendCommand("down");
+
+        }
+    );
+
+
+    downButton.addEventListener(
+        "touchend",
+        function(e) {
+
+            e.preventDefault();
+
+            sendCommand("stop");
+
+        }
+    );
+
+
+    /*
+     * Also support mouse.
+     * Useful when testing the controller
+     * on a laptop.
+     */
+
+    upButton.addEventListener(
+        "mousedown",
+        () => sendCommand("up")
+    );
+
+    upButton.addEventListener(
+        "mouseup",
+        () => sendCommand("stop")
+    );
+
+
+    downButton.addEventListener(
+        "mousedown",
+        () => sendCommand("down")
+    );
+
+    downButton.addEventListener(
+        "mouseup",
+        () => sendCommand("stop")
+    );
+
+
+
+    // ==================================================
+    // STOP EXECUTION HERE
+    // ==================================================
+
+}
+
+
+// ======================================================
+// NORMAL GAME MODE
+// ======================================================
+
+else {
+
+
+    // ==================================================
+    // SIDE SETUP
+    // ==================================================
+
+    const side =
+        params.get("side") === "right"
+            ? "right"
+            : "left";
+
+
+    const myPlayer =
+        side === "left"
+            ? 1
+            : 2;
+
+
+    // ==================================================
+    // CANVAS
+    // ==================================================
+
+    const canvas =
+        document.getElementById("gameCanvas");
+
+
+    const ctx =
+        canvas.getContext("2d");
+
+
+    canvas.classList.add(
+        side === "left"
+            ? "side-left"
+            : "side-right"
+    );
+
+
+    const WIDTH =
+        canvas.width;
+
+
+    const HEIGHT =
+        canvas.height;
+
+
+
+    // ==================================================
+    // TEXT
+    // ==================================================
+
+    document.getElementById(
+        "sideLabel"
+    ).textContent =
+
+        side === "left"
+            ? "(LEFT)"
+            : "(RIGHT)";
+
+
+    document.getElementById(
+        "instructions"
+    ).textContent =
+
+        `Player ${myPlayer}: ` +
+
+        (
+            myPlayer === 1
+                ? "W / S"
+                : "↑ / ↓"
+        ) +
+
+        " — Scan QR to control from phone";
+
+
+
+    // ==================================================
+    // GAME STATE
+    // ==================================================
+
+    let latest = null;
+
+
+    let xOffset =
+        side === "left"
+            ? 0
+            : WIDTH;
+
+
+
+    // ==================================================
+    // WEBSOCKET
+    // ==================================================
+
+    const statusEl =
+        document.getElementById("status");
+
+
+    let ws;
+
+
+    function connect() {
+
+        ws =
+            new WebSocket(
+                `ws://${location.host}/ws/display-${side}`
+            );
+
+
+        ws.onopen = function() {
+
+            statusEl.textContent =
+                `🟢 Connected — Player ${myPlayer}`;
+
+            statusEl.className =
+                "connected";
+
+        };
+
+
+        ws.onclose = function() {
+
+            statusEl.textContent =
+                "🔴 Disconnected — retrying...";
+
+            statusEl.className =
+                "disconnected";
+
+            setTimeout(
+                connect,
+                1000
+            );
+
+        };
+
+
+        ws.onerror = function() {
+
+            ws.close();
+
+        };
+
+
+        ws.onmessage = function(event) {
+
+            latest =
+                JSON.parse(event.data);
+
+
+            if (
+                latest.court &&
+                latest.court.screen_width
+            ) {
+
+                xOffset =
+
+                    side === "left"
+                        ? 0
+                        : latest.court.screen_width;
+
             }
+
+
+            document.getElementById(
+                "score1"
+            ).textContent =
+                latest.score.p1;
+
+
+            document.getElementById(
+                "score2"
+            ).textContent =
+                latest.score.p2;
+
+        };
+
+    }
+
+
+    connect();
+
+
+
+    // ==================================================
+    // SEND KEYBOARD COMMAND
+    // ==================================================
+
+    function send(action) {
+
+        if (
+            ws &&
+            ws.readyState === WebSocket.OPEN
+        ) {
+
+            ws.send(
+
+                JSON.stringify({
+
+                    action: action,
+
+                    player: myPlayer
+
+                })
+
+            );
+
         }
 
-        // ==========================================
-        // KEYBOARD — each screen controls its OWN paddle
-        // ==========================================
-        let keys = {};
-        document.addEventListener("keydown", (e) => { keys[e.key] = true; });
-        document.addEventListener("keyup", (e) => { keys[e.key] = false; });
+    }
 
-        function pollKeys() {
-            if (keys["w"] || keys["W"] || keys["ArrowUp"]) send("up");
-            if (keys["s"] || keys["S"] || keys["ArrowDown"]) send("down");
+
+
+    // ==================================================
+    // KEYBOARD
+    // ==================================================
+
+    let keys = {};
+
+
+    document.addEventListener(
+        "keydown",
+        function(e) {
+
+            keys[e.key] = true;
+
         }
-        // Send at a modest fixed rate so we don't flood the socket
-        setInterval(pollKeys, 1000 / 30);
+    );
 
-        // ==========================================
-        // DRAW — purely a function of the latest server state
-        // ==========================================
-        function draw() {
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-            if (!latest) return;
+    document.addEventListener(
+        "keyup",
+        function(e) {
 
-            const paddleSize = latest.paddle_size;
-            const p1 = latest.paddles.p1;
-            const p2 = latest.paddles.p2;
-            const ball = latest.ball;
+            keys[e.key] = false;
 
-            ctx.fillStyle = "white";
+        }
+    );
 
-            // Paddle 1 (only actually visible on the left screen; naturally
-            // clipped off-canvas on the right screen since its local x < 0)
-            ctx.fillRect(p1.x - xOffset, p1.y, paddleSize.width, paddleSize.height);
 
-            // Paddle 2 (only visible on the right screen)
-            ctx.fillRect(p2.x - xOffset, p2.y, paddleSize.width, paddleSize.height);
+    function pollKeys() {
 
-            // Ball — this is what "travels between screens": it's one
-            // world-coordinate, each screen just draws its local slice
-            ctx.fillRect(ball.x - xOffset, ball.y, ball.size, ball.size);
+        if (
+            keys["w"] ||
+            keys["W"] ||
+            keys["ArrowUp"]
+        ) {
+
+            send("up");
+
         }
 
-        function loop() {
-            draw();
-            requestAnimationFrame(loop);
+
+        if (
+            keys["s"] ||
+            keys["S"] ||
+            keys["ArrowDown"]
+        ) {
+
+            send("down");
+
         }
-        loop();
-    </script>
+
+    }
+
+
+    setInterval(
+        pollKeys,
+        1000 / 30
+    );
+
+
+
+    // ==================================================
+    // DRAW GAME
+    // ==================================================
+
+    function draw() {
+
+        /*
+         * Clear screen
+         */
+
+        ctx.fillStyle = "black";
+
+        ctx.fillRect(
+            0,
+            0,
+            WIDTH,
+            HEIGHT
+        );
+
+
+        if (!latest) {
+            return;
+        }
+
+
+        // ------------------------------------------------
+        // DATA
+        // ------------------------------------------------
+
+        const paddleSize =
+            latest.paddle_size;
+
+
+        const p1 =
+            latest.paddles.p1;
+
+
+        const p2 =
+            latest.paddles.p2;
+
+
+        const ball =
+            latest.ball;
+
+
+        ctx.fillStyle =
+            "white";
+
+
+        // ------------------------------------------------
+        // PLAYER 1 PADDLE
+        // ------------------------------------------------
+
+        ctx.fillRect(
+
+            p1.x - xOffset,
+
+            p1.y,
+
+            paddleSize.width,
+
+            paddleSize.height
+
+        );
+
+
+        // ------------------------------------------------
+        // PLAYER 2 PADDLE
+        // ------------------------------------------------
+
+        ctx.fillRect(
+
+            p2.x - xOffset,
+
+            p2.y,
+
+            paddleSize.width,
+
+            paddleSize.height
+
+        );
+
+
+        // ------------------------------------------------
+        // BALL
+        // ------------------------------------------------
+
+        ctx.fillRect(
+
+            ball.x - xOffset,
+
+            ball.y,
+
+            ball.size,
+
+            ball.size
+
+        );
+
+
+
+        // ------------------------------------------------
+        // CENTER LINE
+        // ------------------------------------------------
+
+        ctx.strokeStyle =
+            "#555";
+
+
+        ctx.setLineDash([
+            15,
+            15
+        ]);
+
+
+        ctx.beginPath();
+
+
+        ctx.moveTo(
+            WIDTH / 2,
+            0
+        );
+
+
+        ctx.lineTo(
+            WIDTH / 2,
+            HEIGHT
+        );
+
+
+        ctx.stroke();
+
+
+        ctx.setLineDash([]);
+
+    }
+
+
+
+    // ==================================================
+    // GAME LOOP
+    // ==================================================
+
+    function loop() {
+
+        draw();
+
+        requestAnimationFrame(loop);
+
+    }
+
+
+    loop();
+
+}
+
+</script>
 
 </body>
+
 </html>
+```
