@@ -133,9 +133,13 @@ SCREAM_DECAY_PER_TICK = 0.985     # charge *= this every tick; ~2-3s to fade bac
 # the court until the BALL touches it. It then speeds the ball up or slows
 # it down and disappears. Speed is clamped so repeated powerups can't spiral
 # the ball into being unhittable (too fast) or boring (too slow).
+#
+# Lowered from 10-20 to 3-6 so a powerup shows up every couple of rallies
+# instead of only in longer ones -- makes them a regular part of play
+# instead of a rare event most short games never even see.
 # ==========================================
-POWERUP_MIN_HITS = 10
-POWERUP_MAX_HITS = 20
+POWERUP_MIN_HITS = 3
+POWERUP_MAX_HITS = 6
 POWERUP_SIZE = 24
 POWERUP_SPEED_MULT = {"fast": 1.35, "slow": 0.72}
 BALL_MIN_SPEED = 4.0

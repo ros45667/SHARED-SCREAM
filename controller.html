@@ -287,7 +287,16 @@
             if (now - lastOrientationSend < ORIENTATION_SEND_INTERVAL_MS) return;
             lastOrientationSend = now;
 
-            const delta = event.beta - baselineBeta; // tilt forward (away from body) = negative-going in most holds
+            // event.beta wraps around at +-180 degrees. A plain subtraction
+            // breaks near that wrap point: e.g. baseline=170, beta=-170 is
+            // only a 20-degree tilt in reality, but 170 - (-170) = 340
+            // divided by TILT_RANGE_DEG instantly maxes out the clamp --
+            // which is exactly what shows up as the paddle snapping all
+            // the way from one edge to the other on an ordinary small
+            // tilt. Wrapping the difference into (-180, 180] first gives
+            // the true shortest angular distance instead.
+            let delta = event.beta - baselineBeta; // tilt forward (away from body) = negative-going in most holds
+            delta = ((delta + 180) % 360 + 360) % 360 - 180;
             let normalized = 0.5 - (delta / TILT_RANGE_DEG) * 0.5;
             normalized = Math.max(0, Math.min(1, normalized));
 

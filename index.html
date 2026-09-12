@@ -83,8 +83,7 @@
             left: 50%;
 
             transform:
-                translate(-50%, -50%)
-                rotate(-90deg);
+                translate(-50%, -50%);
 
             font-size: clamp(80px, 13vw, 230px);
 
@@ -131,22 +130,26 @@
         #gameCanvas {
 
             /*
-             * Internal coordinate system
+             * Full-bleed play area
              *
-             * IMPORTANT:
-             * Keep this at 1200 x 700 because your
-             * server uses these coordinates.
+             * The canvas now always fills the entire viewport, on both
+             * axes, instead of being locked to the server's 600x800
+             * world aspect ratio (which used to letterbox on any screen
+             * that wasn't exactly 3:4, wasting a chunk of the display).
+             * The world is still a fixed size on the server -- draw()
+             * below computes independent X/Y scale factors every frame
+             * (canvas pixel size / world size) so everything the server
+             * sends still lands in the right place, just stretched to
+             * fill whatever this screen's real resolution is. The JS
+             * resize handler keeps canvas.width/height (the drawing
+             * buffer) matching this CSS size, including devicePixelRatio,
+             * so the image stays sharp on high-DPI screens.
              */
 
-            width: min(100vw, calc(100vh * 700 / 1200));
-            height: min(100vh, calc(100vw * 1200 / 700));
-
-            max-width: 100vw;
-            max-height: 100vh;
+            width: 100vw;
+            height: 100vh;
 
             background: transparent;
-
-            border: none;
 
             display: block;
         }
@@ -156,17 +159,37 @@
            SIDE INDICATORS
         ===================================================== */
 
-        #gameCanvas.side-left {
-            border-bottom:
-                2px dashed
-                rgba(0, 255, 255, 0.35);
-        }
-
-
+        /* Both screens now show the ball/paddle-perpendicular axis with
+           the player's own paddle at the BOTTOM and the seam where the
+           two courts join (where the ball crosses from one screen to the
+           other) at the TOP -- so both get the same dashed top border.
+           That top edge is just a crossing point, not a bounce, so it
+           stays dashed and dim. The LEFT and RIGHT edges are different:
+           after the 90-degree rotation they're the court's actual top
+           and bottom walls (world y=0 and y=CANVAS_HEIGHT in main.py's
+           step_physics), which is exactly where the ball bounces -- so
+           they get a brighter, solid, glowing line to make that
+           collision boundary obvious at a glance. */
+        #gameCanvas.side-left,
         #gameCanvas.side-right {
             border-top:
                 2px dashed
-                rgba(0, 255, 255, 0.35);
+                rgba(255, 255, 255, 0.18);
+
+            /* Soft lavender-white instead of a neon cyan -- still
+               clearly visible against the black court, but reads as a
+               court boundary/light strip rather than an arcade glow. */
+            border-left:
+                3px solid
+                rgba(214, 205, 255, 0.55);
+
+            border-right:
+                3px solid
+                rgba(214, 205, 255, 0.55);
+
+            box-shadow:
+                inset 6px 0 16px rgba(139, 110, 246, 0.12),
+                inset -6px 0 16px rgba(139, 110, 246, 0.12);
         }
 
 
@@ -288,6 +311,13 @@
 
         #qrSection {
 
+            /* Hidden by default -- the setup flow (see #setupOverlay) is
+               where players scan the QR code before the game starts.
+               This corner copy is only switched back on during play for
+               phone players, as a quick way to rescan if their phone
+               disconnects (see the startGameBtn handler in the script). */
+            display: none;
+
             position: absolute;
 
             right: 25px;
@@ -308,8 +338,8 @@
             text-align: center;
 
             box-shadow:
-                0 0 30px
-                rgba(0, 255, 255, 0.15);
+                0 0 20px
+                rgba(139, 110, 246, 0.25);
         }
 
 
@@ -427,12 +457,237 @@
         }
 
 
+        /* =====================================================
+           SETUP OVERLAY (choose controls -> connect -> start)
+        ===================================================== */
+
+        #setupOverlay {
+
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 100;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background: radial-gradient(circle at 50% 40%, #141018 0%, #050505 70%);
+
+            color: white;
+
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+
+        .setup-screen {
+
+            display: none;
+
+            flex-direction: column;
+
+            align-items: center;
+
+            width: 90vw;
+
+            max-width: 420px;
+
+            text-align: center;
+        }
+
+
+        .setup-screen.active {
+
+            display: flex;
+        }
+
+
+        .setup-screen h1 {
+
+            font-size: clamp(22px, 4vw, 32px);
+
+            letter-spacing: 3px;
+
+            margin: 0 0 6px;
+        }
+
+
+        .setup-screen p {
+
+            color: rgba(255, 255, 255, 0.55);
+
+            font-size: 15px;
+
+            margin: 0 0 26px;
+        }
+
+
+        .setup-btn {
+
+            width: 100%;
+
+            padding: 22px;
+
+            margin: 8px 0;
+
+            font-size: 18px;
+
+            font-weight: 600;
+
+            letter-spacing: 0.5px;
+
+            border-radius: 16px;
+
+            border: 1px solid rgba(255, 255, 255, 0.12);
+
+            background: #16141a;
+
+            color: #f2f0f7;
+
+            cursor: pointer;
+
+            transition: transform 120ms ease, border-color 120ms ease;
+        }
+
+
+        .setup-btn:active {
+
+            transform: scale(0.97);
+
+            border-color: rgba(196, 181, 253, 0.6);
+        }
+
+
+        .setup-btn .sub {
+
+            display: block;
+
+            margin-top: 6px;
+
+            font-size: 12.5px;
+
+            font-weight: normal;
+
+            color: rgba(255, 255, 255, 0.45);
+        }
+
+
+        .setup-btn.primary {
+
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+
+            border: none;
+
+            font-size: 20px;
+
+            padding: 26px;
+        }
+
+
+        .setup-link {
+
+            background: none;
+
+            border: none;
+
+            color: rgba(196, 181, 253, 0.85);
+
+            font-size: 14px;
+
+            margin-top: 18px;
+
+            padding: 8px;
+
+            cursor: pointer;
+        }
+
+
+        #setupQrcode {
+
+            width: 190px;
+            height: 190px;
+
+            margin: 0 auto 16px;
+
+            padding: 12px;
+
+            background: white;
+
+            border-radius: 14px;
+        }
+
+
+        #setupQrText {
+
+            font-size: 12px;
+
+            color: rgba(255, 255, 255, 0.4);
+
+            word-break: break-all;
+
+            margin-bottom: 22px;
+        }
+
     </style>
 
 </head>
 
 
 <body>
+
+
+<!-- =========================================================
+     SETUP FLOW (choose controls -> connect phone -> start)
+========================================================= -->
+
+<div id="setupOverlay">
+
+    <!-- Step 1: pick a control method -->
+    <div id="setupScreenMode" class="setup-screen active">
+        <h1>SHARED SCREAM</h1>
+        <p>How do you want to play?</p>
+
+        <button class="setup-btn" id="chooseKeyboard">
+            ⌨ Keyboard
+            <span class="sub">W/S or arrow keys on this laptop</span>
+        </button>
+
+        <button class="setup-btn" id="choosePhone">
+            📱 Phone Controller
+            <span class="sub">Tilt to move, scream to grow your paddle</span>
+        </button>
+    </div>
+
+    <!-- Step 2 (phone only): scan + confirm connection -->
+    <div id="setupScreenPhone" class="setup-screen">
+        <h1>Scan with your phone</h1>
+        <p>Then connect it to your paddle</p>
+
+        <div id="setupQrcode"></div>
+        <div id="setupQrText"></div>
+
+        <button class="setup-btn primary" id="phoneConnectedBtn">
+            ✅ I've Connected My Phone
+        </button>
+
+        <button class="setup-link" id="setupBackFromPhone">&larr; Change control method</button>
+    </div>
+
+    <!-- Step 3: start the game -->
+    <div id="setupScreenReady" class="setup-screen">
+        <h1>Ready to play</h1>
+        <p id="readySubtext">Controls set. Whenever you're ready:</p>
+
+        <button class="setup-btn primary" id="startGameBtn">
+            ▶ Start Game
+        </button>
+
+        <button class="setup-link" id="setupBackFromReady">&larr; Change control method</button>
+    </div>
+
+</div>
 
 
 <!-- =========================================================
@@ -479,9 +734,7 @@
     <div id="gameWrapper">
 
         <canvas
-            id="gameCanvas"
-            width="1200"
-            height="700">
+            id="gameCanvas">
         </canvas>
 
     </div>
@@ -581,7 +834,20 @@ let initialPaddleY = null;
 // ============================================================
 // CONTROL METHOD SELECTION
 // ============================================================
-
+//
+// NOTE: this used to also wire up a "choose laptop keyboard vs phone"
+// overlay (#controlOverlay / #controlTitle / #controlSubtitle /
+// #laptopControl / #phoneControl), but that markup doesn't exist in this
+// page anymore. Looking those elements up with getElementById() returned
+// null, and setting `.onclick` on null threw a TypeError -- which, being
+// an uncaught error at the top level of this <script> tag, silently
+// stopped the ENTIRE script right there. That's why the laptop displays
+// never got as far as opening their WebSocket (further down this file)
+// even though the connection code itself was fine -- the phone controller
+// lives in a separate file (controller.html) so it was never affected.
+//
+// The only thing actually needed here is the watermark text, so that's
+// all this block does now.
 if (mode !== "controller") {
 
     const side =
@@ -589,52 +855,15 @@ if (mode !== "controller") {
             ? "right"
             : "left";
 
-    const myPlayer =
-        side === "left"
-            ? 1
-            : 2;
-
-    const overlay =
-        document.getElementById("controlOverlay");
-
-    const title =
-        document.getElementById("controlTitle");
-
-    const subtitle =
-        document.getElementById("controlSubtitle");
-
     const backgroundTitle =
         document.getElementById("backgroundTitle");
 
     // Player 1's laptop shows SHARED.
     // Player 2's laptop shows SCREAM.
-    backgroundTitle.textContent =
-        side === "left" ? "SHARED" : "SCREAM";
-
-    title.textContent =
-        side === "left"
-            ? "PLAYER 1 • SHARED"
-            : "PLAYER 2 • SCREAM";
-
-    subtitle.textContent =
-        "Choose how you want to control your paddle";
-
-    // Laptop keyboard mode
-    document.getElementById("laptopControl").onclick =
-        function() {
-            overlay.style.display = "none";
-            qrWaitingForPhone = false;
-            document.getElementById("qrSection").style.display = "none";
-        };
-
-    // Phone mode
-    document.getElementById("phoneControl").onclick =
-        function() {
-            overlay.style.display = "none";
-            qrWaitingForPhone = true;
-            initialPaddleY = null;
-            showPhoneQR(myPlayer);
-        };
+    if (backgroundTitle) {
+        backgroundTitle.textContent =
+            side === "left" ? "SHARED" : "SCREAM";
+    }
 }
 
 
@@ -934,6 +1163,139 @@ else {
 
 
     // --------------------------------------------------------
+    // CONTROLLER URL / QR HELPER
+    // --------------------------------------------------------
+    // Shared by the setup screen's QR code (shown before the game
+    // starts) and the small corner QR panel (kept available during
+    // play so a phone player can rescan if they get disconnected).
+    // Always HTTPS regardless of what protocol this display page
+    // itself loaded over: phones need a secure context for motion
+    // controls, and /controller (not the old ?mode=controller button
+    // fallback) is the page that actually supports them.
+
+    function buildControllerURL() {
+        return (
+            `https://` +
+            `${window.location.hostname}` +
+            `:${window.HTTPS_PORT}` +
+            `/controller?player=${myPlayer}`
+        );
+    }
+
+    function renderControllerQR(containerId, textId) {
+        const container = document.getElementById(containerId);
+        const textEl = document.getElementById(textId);
+        if (!container) return;
+
+        container.innerHTML = "";
+        const url = buildControllerURL();
+
+        new QRCode(container, {
+            text: url,
+            width: container.clientWidth || 145,
+            height: container.clientHeight || 145,
+            correctLevel: QRCode.CorrectLevel.H
+        });
+
+        if (textEl) textEl.textContent = url;
+    }
+
+
+    // --------------------------------------------------------
+    // SETUP FLOW (choose controls -> connect phone -> start)
+    // --------------------------------------------------------
+    // Every device runs this independently: each laptop's own page
+    // load shows its own "choose keyboard or phone" screen for
+    // its own player, then reveals the actual court (#gamePage) and
+    // opens its websocket only once that player taps Start Game.
+
+    let controlMethod = "keyboard";
+    let gameStarted = false;
+
+    const setupScreens = {
+        mode: document.getElementById("setupScreenMode"),
+        phone: document.getElementById("setupScreenPhone"),
+        ready: document.getElementById("setupScreenReady"),
+    };
+
+    function showSetupScreen(name) {
+        Object.values(setupScreens).forEach(
+            el => el.classList.remove("active")
+        );
+        setupScreens[name].classList.add("active");
+    }
+
+    document.getElementById("chooseKeyboard").addEventListener(
+        "click",
+        () => {
+            controlMethod = "keyboard";
+            showSetupScreen("ready");
+        }
+    );
+
+    document.getElementById("choosePhone").addEventListener(
+        "click",
+        () => {
+            controlMethod = "phone";
+            renderControllerQR("setupQrcode", "setupQrText");
+            showSetupScreen("phone");
+        }
+    );
+
+    // The server has no way to confirm a specific phone paired with a
+    // specific paddle, so this is a manual confirmation -- the player
+    // scans, connects on their phone, then taps this once it says
+    // "connected" over there.
+    document.getElementById("phoneConnectedBtn").addEventListener(
+        "click",
+        () => {
+            showSetupScreen("ready");
+        }
+    );
+
+    document.getElementById("setupBackFromPhone").addEventListener(
+        "click",
+        () => showSetupScreen("mode")
+    );
+
+    document.getElementById("setupBackFromReady").addEventListener(
+        "click",
+        () => showSetupScreen("mode")
+    );
+
+    document.getElementById("startGameBtn").addEventListener(
+        "click",
+        () => {
+            if (gameStarted) return;
+            gameStarted = true;
+
+            document.getElementById("setupOverlay").style.display = "none";
+            document.getElementById("gamePage").style.display = "flex";
+
+            // The canvas was hidden (gamePage was display:none) when
+            // resizeCanvas() first ran further down, so clientWidth/
+            // clientHeight would have read as 0 back then. Now that the
+            // page is actually visible, measure it for real before the
+            // first real draw.
+            resizeCanvas();
+
+            const qrSection = document.getElementById("qrSection");
+            if (controlMethod === "phone") {
+                // Keep a small QR available during play in case this
+                // player's phone disconnects and needs a rescan.
+                renderControllerQR("qrcode", "qrText");
+                qrSection.style.display = "block";
+            } else {
+                qrSection.style.display = "none";
+            }
+
+            connect();
+            loop();
+        }
+    );
+
+
+    // --------------------------------------------------------
     // CANVAS
     // --------------------------------------------------------
 
@@ -956,12 +1318,46 @@ else {
     );
 
 
-    const WIDTH =
-        canvas.width;
+    // --------------------------------------------------------
+    // FULL-SCREEN CANVAS SIZING
+    // --------------------------------------------------------
+    // The canvas's CSS size is 100vw/100vh (see the stylesheet), so it
+    // always fills the whole screen. This keeps the canvas's actual
+    // drawing buffer (canvas.width/height, in real device pixels) in
+    // sync with that CSS size -- including devicePixelRatio, so the
+    // game stays sharp on high-DPI phone/laptop screens instead of
+    // getting blurry or, worse, drawn at a stale resolution left over
+    // from the last screen size. WIDTH/HEIGHT are read fresh from the
+    // canvas inside draw() every frame, so nothing else needs to know
+    // about resizes directly.
+
+    function resizeCanvas() {
+
+        const dpr =
+            window.devicePixelRatio || 1;
+
+        canvas.width =
+            Math.round(canvas.clientWidth * dpr);
+
+        canvas.height =
+            Math.round(canvas.clientHeight * dpr);
+
+    }
 
 
-    const HEIGHT =
-        canvas.height;
+    window.addEventListener(
+        "resize",
+        resizeCanvas
+    );
+
+
+    window.addEventListener(
+        "orientationchange",
+        resizeCanvas
+    );
+
+
+    resizeCanvas();
 
 
     // --------------------------------------------------------
@@ -985,11 +1381,23 @@ else {
 
 
     // Server world remains horizontal; we display it rotated 90 degrees.
-    // Player 1 is the TOP half and Player 2 is the BOTTOM half.
+    // Player 1's half-court is world-x [0, 800) and Player 2's is
+    // [800, 1600) -- yOffset shifts whichever half this screen shows down
+    // to local 0..800 (updated to the server's real screen_width as soon
+    // as the first message arrives; 800 here is just a same-shaped guess
+    // to draw something reasonable before that).
     let yOffset =
         side === "left"
             ? 0
-            : 1200;
+            : 800;
+
+    // Both screens show their OWN paddle at the BOTTOM of their OWN
+    // canvas and the seam between the two courts at the TOP -- so the
+    // ball crosses from the top of one screen straight into the top of
+    // the other. World-x already increases from player 1's wall towards
+    // player 2's wall, so player 1's local axis needs flipping to get
+    // that "own paddle at the bottom" layout; player 2's doesn't.
+    const flipPerp = side === "left";
 
 
     // --------------------------------------------------------
@@ -1130,8 +1538,9 @@ else {
     }
 
 
-    connect();
-
+    // Opened by the startGameBtn handler above (see SETUP FLOW),
+    // not automatically -- the court only starts talking to the
+    // server once the player has actually pressed Start Game.
 
 
     // --------------------------------------------------------
@@ -1244,6 +1653,17 @@ else {
     function draw() {
 
 
+        // Read the canvas's REAL pixel size fresh every frame -- it
+        // changes whenever resizeCanvas() runs (window resize, phone
+        // rotation), so this can never be a stale const like it used
+        // to be back when the canvas was a fixed 600x800.
+        const WIDTH =
+            canvas.width;
+
+        const HEIGHT =
+            canvas.height;
+
+
         // Clear
 
         ctx.clearRect(
@@ -1260,6 +1680,43 @@ else {
 
             return;
 
+        }
+
+
+        // ----------------------------------------------------
+        // WORLD -> SCREEN SCALE
+        // ----------------------------------------------------
+        // The server's world is a fixed size (see main.py: CANVAS_HEIGHT
+        // is the paddle's up/down travel range, court.screen_width is
+        // one player's half-court length) but this canvas now fills
+        // whatever the real screen resolution is, on both axes
+        // independently -- so every world coordinate needs scaling up
+        // (or down) to land in the right spot. worldVert is the world's
+        // "vertical/paddle-travel" axis, which after the 90-degree
+        // rotation becomes this canvas's horizontal (X) axis; worldHoriz
+        // is the world's "along the court" axis, which becomes this
+        // canvas's vertical (Y) axis. Falling back to the server's
+        // defaults (600/800) means the very first frame, before any
+        // message has arrived, still draws something sane.
+        const worldVert =
+            (latest.court && latest.court.height) || 600;
+
+        const worldHoriz =
+            (latest.court && latest.court.screen_width) || 800;
+
+        const scaleX = WIDTH / worldVert;
+        const scaleY = HEIGHT / worldHoriz;
+
+
+        // Maps a world-x position (which is 0 at player 1's own wall and
+        // increases toward player 2's own wall) onto this screen's local
+        // vertical axis, given the on-screen thickness of what's being
+        // drawn (paddle thickness, ball/powerup diameter) -- both already
+        // scaled by the caller into screen pixels. See flipPerp above for
+        // why player 1's screen flips this and player 2's doesn't.
+        function perpToScreen(worldX, thicknessScaled) {
+            const local = (worldX - yOffset) * scaleY;
+            return flipPerp ? (HEIGHT - local - thicknessScaled) : local;
         }
 
 
@@ -1281,6 +1738,43 @@ else {
 
         const ball =
             latest.ball;
+
+
+        // ----------------------------------------------------
+        // BOUNCE-WALL BORDERS
+        // ----------------------------------------------------
+        // These are drawn INSIDE the canvas (in addition to the CSS
+        // border-left/border-right on the canvas element itself) as a
+        // glowing line right along world y=0 and y=CANVAS_HEIGHT -- the
+        // exact pixels step_physics() bounces the ball off of. Drawing
+        // them here as well keeps them pinned to the real collision
+        // boundary even if a future change ever makes the CSS border
+        // and the drawing buffer disagree by a pixel or two.
+
+        // A soft violet-to-pink vertical gradient reads as a clean light
+        // strip rather than an arcade neon glow -- same idea as the old
+        // flat cyan line, just a calmer, more polished palette.
+        const wallGradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+        wallGradient.addColorStop(0, "rgba(196, 181, 253, 0.85)");
+        wallGradient.addColorStop(0.5, "rgba(216, 180, 254, 0.6)");
+        wallGradient.addColorStop(1, "rgba(196, 181, 253, 0.85)");
+
+        ctx.save();
+        ctx.strokeStyle = wallGradient;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "rgba(139, 110, 246, 0.45)";
+        ctx.shadowBlur = 8;
+
+        ctx.beginPath();
+        ctx.moveTo(1.5, 0);
+        ctx.lineTo(1.5, HEIGHT);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(WIDTH - 1.5, 0);
+        ctx.lineTo(WIDTH - 1.5, HEIGHT);
+        ctx.stroke();
+        ctx.restore();
 
 
         // ----------------------------------------------------
@@ -1331,26 +1825,37 @@ else {
 
 
         // Rotate the server's horizontal world into a vertical court.
-        // X becomes screen Y; Y becomes screen X.
-        // Paddles therefore become horizontal at the top/bottom edges.
+        // X becomes screen Y; Y becomes screen X. Every dimension is
+        // scaled into screen pixels: paddle position/height move along
+        // the world-vertical axis (scaleX), paddle thickness moves along
+        // the world-horizontal axis (scaleY). Paddles therefore become
+        // horizontal, each own paddle at the bottom of its own screen
+        // (see perpToScreen above).
+
+        const paddleThicknessPx =
+            paddleSize.width * scaleY;
 
         // Player 1
         ctx.fillRect(
-            p1.y,
+            p1.y * scaleX,
 
-            paddleSize.width,
+            perpToScreen(p1.x, paddleThicknessPx),
 
-            p1.height
+            p1.height * scaleX,
+
+            paddleThicknessPx
 
         );
 
         // Player 2
         ctx.fillRect(
-            p2.y,
+            p2.y * scaleX,
 
-            paddleSize.width,
+            perpToScreen(p2.x, paddleThicknessPx),
 
-            p2.height
+            p2.height * scaleX,
+
+            paddleThicknessPx
 
         );
 
@@ -1359,14 +1864,24 @@ else {
         // ----------------------------------------------------
         // BALL
         // ----------------------------------------------------
+        // Drawn as an ellipse rather than a circle because scaleX and
+        // scaleY are generally different (the screen's aspect ratio
+        // rarely matches the world's exactly) -- using ctx.arc() here
+        // would draw a circle sized only by one axis and it would drift
+        // out of sync with the ball's actual scaled hitbox on the other.
+
+        const ballRx = (ball.size * scaleX) / 2;
+        const ballRy = (ball.size * scaleY) / 2;
 
         ctx.beginPath();
 
 
-        ctx.arc(
-            ball.y + ball.size / 2,
-            ball.x - yOffset + ball.size / 2,
-            ball.size / 2,
+        ctx.ellipse(
+            ball.y * scaleX + ballRx,
+            perpToScreen(ball.x, ball.size * scaleY) + ballRy,
+            ballRx,
+            ballRy,
+            0,
             0,
             Math.PI * 2
         );
@@ -1382,12 +1897,14 @@ else {
         const powerup = latest.powerup;
 
         if (powerup) {
-            const pcx = powerup.x - xOffset + powerup.size / 2;
-            const pcy = powerup.y + powerup.size / 2;
+            const pRx = (powerup.size * scaleX) / 2;
+            const pRy = (powerup.size * scaleY) / 2;
+            const pcx = powerup.y * scaleX + pRx;
+            const pcy = perpToScreen(powerup.x, powerup.size * scaleY) + pRy;
             const isFast = powerup.type === "fast";
 
             ctx.beginPath();
-            ctx.arc(pcx, pcy, powerup.size / 2, 0, Math.PI * 2);
+            ctx.ellipse(pcx, pcy, pRx, pRy, 0, 0, Math.PI * 2);
             ctx.fillStyle = isFast ? "#ffcc00" : "#33aaff";
             ctx.fill();
             ctx.lineWidth = 2;
@@ -1452,65 +1969,10 @@ else {
     }
 
 
-    loop();
-
-
-    // ========================================================
-    // QR CODE
-    // ========================================================
-
-    /*
-     * IMPORTANT:
-     *
-     * location.hostname is used instead of localhost.
-     *
-     * This allows a phone on the same Wi-Fi network
-     * to connect to the laptop.
-     */
-
-    // Always HTTPS, regardless of what protocol this display page itself
-    // loaded over: phones need a secure context for motion controls, and
-    // /controller (not the old ?mode=controller button fallback) is the
-    // page that actually supports them.
-    const controllerURL =
-
-        `https://` +
-
-        `${window.location.hostname}` +
-
-        `:${window.HTTPS_PORT}` +
-
-        `/controller?player=${myPlayer}`;
-
-
-    new QRCode(
-
-        document.getElementById(
-            "qrcode"
-        ),
-
-        {
-
-            text: controllerURL,
-
-            width: 145,
-
-            height: 145,
-
-            correctLevel:
-                QRCode.CorrectLevel.H
-
-        }
-
-    );
-
-
-    // Show generated address
-
-    document.getElementById(
-        "qrText"
-    ).textContent =
-        controllerURL;
+    // Also started by the startGameBtn handler (see SETUP FLOW), along
+    // with connect() -- both QR codes (the setup screen's and the
+    // corner one) are rendered on demand there via renderControllerQR()
+    // instead of once, unconditionally, here.
 
 }
 
@@ -1519,4 +1981,3 @@ else {
 </body>
 
 </html>
-```
