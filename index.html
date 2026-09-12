@@ -1,1 +1,378 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Scream Pong</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        #gameCanvas {
+            background: black;
+            border: 3px solid white;
+        }
+
+        .instructions {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .score {
+            font-size: 30px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🎮 SCREAM PONG 🎮</h1>
+
+    <div class="score">
+        <span id="score1">0</span>
+        &nbsp;&nbsp;&nbsp;
+        <span id="score2">0</span>
+    </div>
+
+    <canvas id="gameCanvas" width="1000" height="600"></canvas>
+
+    <div class="instructions">
+        Player 1: W / S
+        &nbsp;&nbsp; | &nbsp;&nbsp;
+        Player 2: ↑ / ↓
+    </div>
+
+    <script>
+
+        // ==========================================
+        // CANVAS
+        // ==========================================
+
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+
+
+        // ==========================================
+        // PADDLES
+        // ==========================================
+
+        const paddleWidth = 15;
+
+        let paddleHeight = 100;
+
+        let paddle1 = {
+            x: 30,
+            y: HEIGHT / 2 - paddleHeight / 2,
+            width: paddleWidth,
+            height: paddleHeight,
+            speed: 7
+        };
+
+        let paddle2 = {
+            x: WIDTH - 45,
+            y: HEIGHT / 2 - paddleHeight / 2,
+            width: paddleWidth,
+            height: paddleHeight,
+            speed: 7
+        };
+
+
+        // ==========================================
+        // BALL
+        // ==========================================
+
+        let ball = {
+            x: WIDTH / 2,
+            y: HEIGHT / 2,
+            size: 15,
+            speedX: 5,
+            speedY: 5
+        };
+
+
+        // ==========================================
+        // SCORE
+        // ==========================================
+
+        let score1 = 0;
+        let score2 = 0;
+
+
+        // ==========================================
+        // KEYBOARD
+        // ==========================================
+
+        let keys = {};
+
+        document.addEventListener("keydown", function(event) {
+            keys[event.key] = true;
+        });
+
+        document.addEventListener("keyup", function(event) {
+            keys[event.key] = false;
+        });
+
+
+        // ==========================================
+        // RESET BALL
+        // ==========================================
+
+        function resetBall() {
+
+            ball.x = WIDTH / 2;
+            ball.y = HEIGHT / 2;
+
+            ball.speedX = ball.speedX > 0 ? -5 : 5;
+
+            ball.speedY = 5;
+        }
+
+
+        // ==========================================
+        // UPDATE GAME
+        // ==========================================
+
+        function update() {
+
+            // -----------------------------
+            // PLAYER 1
+            // -----------------------------
+
+            if (keys["w"] || keys["W"]) {
+                paddle1.y -= paddle1.speed;
+            }
+
+            if (keys["s"] || keys["S"]) {
+                paddle1.y += paddle1.speed;
+            }
+
+
+            // -----------------------------
+            // PLAYER 2
+            // -----------------------------
+
+            if (keys["ArrowUp"]) {
+                paddle2.y -= paddle2.speed;
+            }
+
+            if (keys["ArrowDown"]) {
+                paddle2.y += paddle2.speed;
+            }
+
+
+            // -----------------------------
+            // KEEP PADDLES INSIDE SCREEN
+            // -----------------------------
+
+            if (paddle1.y < 0) {
+                paddle1.y = 0;
+            }
+
+            if (paddle1.y + paddle1.height > HEIGHT) {
+                paddle1.y = HEIGHT - paddle1.height;
+            }
+
+            if (paddle2.y < 0) {
+                paddle2.y = 0;
+            }
+
+            if (paddle2.y + paddle2.height > HEIGHT) {
+                paddle2.y = HEIGHT - paddle2.height;
+            }
+
+
+            // -----------------------------
+            // MOVE BALL
+            // -----------------------------
+
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+
+            // -----------------------------
+            // TOP / BOTTOM COLLISION
+            // -----------------------------
+
+            if (ball.y <= 0 || ball.y + ball.size >= HEIGHT) {
+                ball.speedY *= -1;
+            }
+
+
+            // -----------------------------
+            // PLAYER 1 COLLISION
+            // -----------------------------
+
+            if (
+                ball.x <= paddle1.x + paddle1.width &&
+                ball.x + ball.size >= paddle1.x &&
+                ball.y + ball.size >= paddle1.y &&
+                ball.y <= paddle1.y + paddle1.height &&
+                ball.speedX < 0
+            ) {
+
+                ball.speedX *= -1;
+            }
+
+
+            // -----------------------------
+            // PLAYER 2 COLLISION
+            // -----------------------------
+
+            if (
+                ball.x + ball.size >= paddle2.x &&
+                ball.x <= paddle2.x + paddle2.width &&
+                ball.y + ball.size >= paddle2.y &&
+                ball.y <= paddle2.y + paddle2.height &&
+                ball.speedX > 0
+            ) {
+
+                ball.speedX *= -1;
+            }
+
+
+            // -----------------------------
+            // PLAYER 2 SCORES
+            // -----------------------------
+
+            if (ball.x < 0) {
+
+                score2++;
+
+                document.getElementById("score2").textContent = score2;
+
+                resetBall();
+            }
+
+
+            // -----------------------------
+            // PLAYER 1 SCORES
+            // -----------------------------
+
+            if (ball.x > WIDTH) {
+
+                score1++;
+
+                document.getElementById("score1").textContent = score1;
+
+                resetBall();
+            }
+        }
+
+
+        // ==========================================
+        // DRAW GAME
+        // ==========================================
+
+        function draw() {
+
+            // Background
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+
+            // -----------------------------
+            // CENTER LINE
+            // -----------------------------
+
+            ctx.strokeStyle = "white";
+            ctx.setLineDash([10, 10]);
+
+            ctx.beginPath();
+
+            ctx.moveTo(WIDTH / 2, 0);
+            ctx.lineTo(WIDTH / 2, HEIGHT);
+
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+
+
+            // -----------------------------
+            // PADDLE 1
+            // -----------------------------
+
+            ctx.fillStyle = "white";
+
+            ctx.fillRect(
+                paddle1.x,
+                paddle1.y,
+                paddle1.width,
+                paddle1.height
+            );
+
+
+            // -----------------------------
+            // PADDLE 2
+            // -----------------------------
+
+            ctx.fillRect(
+                paddle2.x,
+                paddle2.y,
+                paddle2.width,
+                paddle2.height
+            );
+
+
+            // -----------------------------
+            // BALL
+            // -----------------------------
+
+            ctx.fillRect(
+                ball.x,
+                ball.y,
+                ball.size,
+                ball.size
+            );
+        }
+
+
+        // ==========================================
+        // GAME LOOP
+        // ==========================================
+
+        function gameLoop() {
+
+            update();
+
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+
+        // START GAME
+        gameLoop();
+
+    </script>
+
+</body>
+
+</html>
+```
 
