@@ -1,3 +1,5 @@
+<img width="1280" height="640" alt="image" src="https://github.com/user-attachments/assets/30822118-5426-4152-9aaa-e67f12caccb8" />
+
 # Scream Pong
 
 ### Demo
