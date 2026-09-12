@@ -53,6 +53,14 @@
         }
         #swingMeterFill { height: 100%; width: 0%; background: #0af; }
 
+        .scream-meter {
+            width: 100%; height: 10px; background: #151515; border-radius: 5px; overflow: hidden; margin: 10px 0 4px;
+        }
+        .scream-meter-fill { height: 100%; width: 0%; background: #ff3b6b; transition: width 60ms linear; }
+        .scream-label { font-size: 12px; color: #999; margin: 0 0 4px; }
+
+        #body.scream-flash { background-color: #3a0012 !important; }
+
         .hint { font-size: 14px; color: #999; margin-top: 8px; line-height: 1.5; }
         .warn { font-size: 13px; color: #ffb300; margin-top: 10px; line-height: 1.4; }
 
@@ -84,6 +92,15 @@
         <h2 id="titleButtons">Controller</h2>
         <button class="control" id="up">UP</button>
         <button class="control" id="down">DOWN</button>
+
+        <div id="screamPromptButtons" class="scream-section">
+            <button class="link-btn" data-enable-scream>🎤 Enable Scream Power</button>
+        </div>
+        <div id="screamMeterButtons" class="scream-section" style="display:none; width:100%;">
+            <p class="scream-label">scream power (grows your paddle)</p>
+            <div class="scream-meter"><div class="scream-meter-fill"></div></div>
+        </div>
+
         <button class="link-btn" data-back>⟵ Change control mode</button>
     </div>
 
@@ -111,6 +128,14 @@
             <div id="tiltTrack"><div id="tiltPuck"></div></div>
 
             <p class="hint">Tilt the phone up/down to move your paddle.<br>Swing it sharply to hit the ball with power.</p>
+
+            <div id="screamPromptMotion" class="scream-section">
+                <button class="link-btn" data-enable-scream>🎤 Enable Scream Power</button>
+            </div>
+            <div id="screamMeterMotion" class="scream-section" style="display:none; width:100%;">
+                <p class="scream-label">scream power (grows your paddle)</p>
+                <div class="scream-meter"><div class="scream-meter-fill"></div></div>
+            </div>
 
             <button class="link-btn" id="recalibrate">🎯 Recalibrate center</button>
             <button class="link-btn" data-back>⟵ Change control mode</button>
@@ -328,6 +353,94 @@
         document.getElementById("enableMotion").addEventListener("click", enableMotion);
         document.getElementById("recalibrate").addEventListener("click", () => {
             if (latestBeta !== null) baselineBeta = latestBeta;
+        });
+
+        // ==========================================
+        // SCREAM POWER (mic-based, independent of button/motion mode)
+        // ==========================================
+        // Tunable calibration: getByteTimeDomainData gives bytes centered on
+        // 128, so RMS deviation is roughly 0 in a silent room and can climb
+        // past 0.4 for a real scream close to the mic. Adjust these if it
+        // feels too twitchy (raise SCREAM_MIN_RMS) or too hard to trigger
+        // (lower SCREAM_MAX_RMS).
+        const SCREAM_MIN_RMS = 0.03;   // quieter than this counts as 0
+        const SCREAM_MAX_RMS = 0.35;   // this loud (or louder) counts as full 1.0
+        const SCREAM_SEND_INTERVAL_MS = 1000 / 20; // throttle to 20Hz, same as tilt
+        const SCREAM_FLASH_THRESHOLD = 0.85;       // screen flashes above this level
+
+        let screamEnabled = false;
+        let audioCtx, analyser, screamDataArray;
+        let lastScreamSend = 0;
+        let lastScreamFlash = 0;
+
+        const screamPrompts = [
+            document.getElementById("screamPromptButtons"),
+            document.getElementById("screamPromptMotion"),
+        ];
+        const screamMeters = [
+            document.getElementById("screamMeterButtons"),
+            document.getElementById("screamMeterMotion"),
+        ];
+
+        function setScreamMeterFill(level) {
+            screamMeters.forEach(el => {
+                const fill = el.querySelector(".scream-meter-fill");
+                if (fill) fill.style.width = `${Math.round(level * 100)}%`;
+            });
+        }
+
+        function screamLoop() {
+            if (!screamEnabled) return;
+            requestAnimationFrame(screamLoop);
+
+            analyser.getByteTimeDomainData(screamDataArray);
+            let sumSquares = 0;
+            for (let i = 0; i < screamDataArray.length; i++) {
+                const dev = (screamDataArray[i] - 128) / 128;
+                sumSquares += dev * dev;
+            }
+            const rms = Math.sqrt(sumSquares / screamDataArray.length);
+            let level = (rms - SCREAM_MIN_RMS) / (SCREAM_MAX_RMS - SCREAM_MIN_RMS);
+            level = Math.max(0, Math.min(1, level));
+
+            setScreamMeterFill(level);
+
+            const now = performance.now();
+            if (level >= SCREAM_FLASH_THRESHOLD && now - lastScreamFlash > 200) {
+                lastScreamFlash = now;
+                bodyEl.classList.add("scream-flash");
+                setTimeout(() => bodyEl.classList.remove("scream-flash"), 150);
+                if (navigator.vibrate) navigator.vibrate(30);
+            }
+
+            if (now - lastScreamSend >= SCREAM_SEND_INTERVAL_MS) {
+                lastScreamSend = now;
+                sendMsg({ action: "scream", level });
+            }
+        }
+
+        async function enableScream() {
+            try {
+                const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(micStream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+                screamDataArray = new Uint8Array(analyser.fftSize);
+                source.connect(analyser);
+            } catch (err) {
+                alert("Couldn't get microphone permission: " + err);
+                return;
+            }
+
+            screamEnabled = true;
+            screamPrompts.forEach(el => { el.style.display = "none"; });
+            screamMeters.forEach(el => { el.style.display = "block"; });
+            requestAnimationFrame(screamLoop);
+        }
+
+        document.querySelectorAll("[data-enable-scream]").forEach(btn => {
+            btn.addEventListener("click", enableScream);
         });
     </script>
 </body>
