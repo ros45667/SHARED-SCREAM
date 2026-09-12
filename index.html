@@ -1,186 +1,352 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <title>Scream Pong</title>
+    <title>Shared Scream</title>
 
     <!-- QR CODE LIBRARY -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
+
     <style>
+
+        /* =====================================================
+           GLOBAL
+        ===================================================== */
 
         * {
             box-sizing: border-box;
         }
 
-        body {
-            margin: 0;
-            background: #080808;
-            color: white;
-            font-family: Arial, sans-serif;
 
-            min-height: 100vh;
+        html,
+        body {
+
+            width: 100%;
+            height: 100%;
+
+            margin: 0;
+            padding: 0;
+
+            overflow: hidden;
+
+            background: #050505;
+
+            color: white;
+
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+
+        /* =====================================================
+           MAIN GAME AREA
+        ===================================================== */
+
+        #gamePage {
+
+            position: relative;
+
+            width: 100vw;
+            height: 100vh;
 
             display: flex;
-            flex-direction: column;
+
             align-items: center;
             justify-content: center;
 
             overflow: hidden;
+
+            background: #050505;
         }
 
-        /* ================================
-           TITLE
-        ================================= */
 
-        h1 {
-            font-size: 42px;
-            margin: 5px 0 10px;
-            letter-spacing: 2px;
+        /* =====================================================
+           SHARED SCREAM BACKGROUND
+        ===================================================== */
+
+        #backgroundTitle {
+
+            position: absolute;
+
+            top: 50%;
+            left: 50%;
+
+            transform:
+                translate(-50%, -50%)
+                rotate(-90deg);
+
+            font-size: clamp(80px, 13vw, 230px);
+
+            font-weight: 900;
+
+            letter-spacing: 15px;
+
+            white-space: nowrap;
+
+            color: rgba(255, 255, 255, 0.035);
+
+            pointer-events: none;
+
+            user-select: none;
+
+            z-index: 0;
         }
 
-        /* ================================
-           STATUS
-        ================================= */
 
-        #status {
-            position: fixed;
-            top: 15px;
-            left: 15px;
+        /* =====================================================
+           GAME AREA
+        ===================================================== */
 
-            font-size: 15px;
-            font-family: monospace;
+        #gameWrapper {
+
+            position: relative;
+
+            width: 100%;
+            height: 100%;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            z-index: 2;
         }
 
-        #status.connected {
-            color: #00ff66;
-        }
 
-        #status.disconnected {
-            color: #ff3333;
-        }
-
-        /* ================================
-           SCORE
-        ================================= */
-
-        .score {
-            font-size: 50px;
-            font-weight: bold;
-
-            margin-bottom: 10px;
-        }
-
-        /* ================================
+        /* =====================================================
            GAME CANVAS
-        ================================= */
+        ===================================================== */
 
         #gameCanvas {
 
-            background: black;
-
             /*
-             * Larger actual game world
+             * Internal coordinate system
+             *
+             * IMPORTANT:
+             * Keep this at 1200 x 700 because your
+             * server uses these coordinates.
              */
-            width: 90vw;
-            height: 70vh;
 
-            max-width: 1400px;
-            max-height: 800px;
+            width: 100vw;
+            height: 100vh;
 
-            border: 4px solid white;
+            max-width: 100vw;
+            max-height: 100vh;
+
+            background: transparent;
+
+            border: none;
 
             display: block;
         }
 
-        /* Highlight outer edge */
+
+        /* =====================================================
+           SIDE INDICATORS
+        ===================================================== */
 
         #gameCanvas.side-left {
 
-            border-right-style: dashed;
-            border-right-color: cyan;
+            border-right:
+                2px dashed
+                rgba(0, 255, 255, 0.35);
         }
+
 
         #gameCanvas.side-right {
 
-            border-left-style: dashed;
-            border-left-color: cyan;
+            border-left:
+                2px dashed
+                rgba(0, 255, 255, 0.35);
         }
 
-        /* ================================
-           INSTRUCTIONS
-        ================================= */
 
-        .instructions {
+        /* =====================================================
+           SCORE
+        ===================================================== */
 
-            margin-top: 10px;
+        #scoreBoard {
+
+            position: absolute;
+
+            top: 22px;
+
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            z-index: 10;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 28px;
+
+            font-size: 28px;
+
+            font-weight: 600;
+
+            letter-spacing: 3px;
+
+            pointer-events: none;
+        }
+
+
+        #score1,
+        #score2 {
+
+            min-width: 30px;
 
             text-align: center;
-
-            font-size: 18px;
-
-            color: #cccccc;
         }
 
-        /* ================================
-           QR SECTION
-        ================================= */
+
+        #scoreDivider {
+
+            opacity: 0.35;
+
+            font-size: 18px;
+        }
+
+
+        /* =====================================================
+           SCREEN SIDE LABEL
+        ===================================================== */
+
+        #sideLabel {
+
+            position: absolute;
+
+            top: 68px;
+
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            z-index: 10;
+
+            font-size: 12px;
+
+            letter-spacing: 4px;
+
+            text-transform: uppercase;
+
+            opacity: 0.45;
+
+            pointer-events: none;
+        }
+
+
+        /* =====================================================
+           CONNECTION STATUS
+        ===================================================== */
+
+        #status {
+
+            position: absolute;
+
+            top: 20px;
+            left: 20px;
+
+            z-index: 20;
+
+            font-size: 13px;
+
+            font-family: monospace;
+
+            opacity: 0.8;
+        }
+
+
+        #status.connected {
+
+            color: #00ff66;
+        }
+
+
+        #status.disconnected {
+
+            color: #ff3333;
+        }
+
+
+        /* =====================================================
+           QR CODE PANEL
+        ===================================================== */
 
         #qrSection {
 
-            position: fixed;
+            position: absolute;
 
-            right: 20px;
-            bottom: 20px;
+            right: 25px;
+            bottom: 25px;
 
-            background: white;
+            z-index: 30;
+
+            width: 175px;
+
+            padding: 12px;
+
+            background: rgba(255, 255, 255, 0.96);
 
             color: black;
-
-            padding: 15px;
 
             border-radius: 12px;
 
             text-align: center;
 
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-
-            z-index: 10;
+            box-shadow:
+                0 0 30px
+                rgba(0, 255, 255, 0.15);
         }
+
 
         #qrSection h3 {
 
             margin: 0 0 8px;
 
-            font-size: 16px;
+            font-size: 14px;
+
+            letter-spacing: 1px;
         }
+
 
         #qrcode {
 
-            width: 150px;
-            height: 150px;
+            width: 145px;
+            height: 145px;
 
             margin: auto;
         }
 
+
         #qrText {
 
-            margin-top: 8px;
+            margin-top: 7px;
 
-            font-size: 11px;
+            font-size: 9px;
 
-            max-width: 160px;
+            line-height: 1.3;
 
             word-break: break-all;
+
+            opacity: 0.65;
         }
 
-        /* ================================
+
+        /* =====================================================
            PHONE CONTROLLER
-        ================================= */
+        ===================================================== */
 
         #controller {
 
@@ -189,7 +355,7 @@
             width: 100vw;
             height: 100vh;
 
-            background: #080808;
+            background: #050505;
 
             flex-direction: column;
 
@@ -197,22 +363,36 @@
 
             justify-content: center;
 
-            gap: 25px;
+            gap: 20px;
         }
+
 
         #controller h1 {
 
-            font-size: 35px;
+            font-size: 32px;
+
+            letter-spacing: 3px;
         }
+
 
         .controller-info {
 
             font-size: 20px;
         }
 
+
+        #phoneStatus {
+
+            font-family: monospace;
+
+            color: #00ff66;
+        }
+
+
         .control-button {
 
             width: 80vw;
+
             max-width: 400px;
 
             height: 130px;
@@ -223,16 +403,19 @@
 
             border-radius: 25px;
 
-            background: #222;
+            background: #181818;
 
             color: white;
 
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+            box-shadow:
+                0 0 20px
+                rgba(0, 255, 255, 0.2);
 
             touch-action: none;
 
             user-select: none;
         }
+
 
         .control-button:active {
 
@@ -241,12 +424,6 @@
             transform: scale(0.97);
         }
 
-        #phoneStatus {
-
-            font-family: monospace;
-
-            color: #00ff66;
-        }
 
     </style>
 
@@ -256,84 +433,100 @@
 <body>
 
 
-<!-- =====================================================
-     GAME DISPLAY
-===================================================== -->
+<!-- =========================================================
+     LAPTOP GAME
+========================================================= -->
 
 <div id="gamePage">
+
+
+    <!-- Background watermark -->
+
+    <div id="backgroundTitle">
+        SHARED SCREAM
+    </div>
+
+
+    <!-- Connection -->
 
     <div id="status">
         connecting...
     </div>
 
 
-    <h1>
-        🎮 SCREAM PONG
-        <span id="sideLabel"></span>
-    </h1>
+    <!-- Side -->
+
+    <div id="sideLabel"></div>
 
 
-    <div class="score">
+    <!-- Score -->
+
+    <div id="scoreBoard">
 
         <span id="score1">0</span>
 
-        &nbsp;&nbsp;&nbsp;
+        <span id="scoreDivider">:</span>
 
         <span id="score2">0</span>
 
     </div>
 
 
-    <canvas
-        id="gameCanvas"
-        width="1200"
-        height="700">
-    </canvas>
+    <!-- Game -->
 
+    <div id="gameWrapper">
 
-    <div
-        class="instructions"
-        id="instructions">
+        <canvas
+            id="gameCanvas"
+            width="1200"
+            height="700">
+        </canvas>
+
     </div>
 
 
-    <!-- QR CODE -->
+    <!-- QR -->
 
     <div id="qrSection">
 
         <h3>
-            📱 Scan to Control
+            📱 PHONE CONTROL
         </h3>
 
         <div id="qrcode"></div>
 
         <div id="qrText">
-            Scan this QR code with your phone
+            Scan to control your paddle
         </div>
 
     </div>
+
 
 </div>
 
 
 
-<!-- =====================================================
+<!-- =========================================================
      PHONE CONTROLLER
-===================================================== -->
+========================================================= -->
 
 <div id="controller">
 
+
     <h1>
-        🎮 PONG CONTROLLER
+        SHARED SCREAM
     </h1>
+
 
     <div class="controller-info">
 
+        Player
         <span id="phonePlayer">
-            Player
+            1
         </span>
 
     </div>
+
 
     <div id="phoneStatus">
         Connecting...
@@ -357,6 +550,7 @@
 
     </button>
 
+
 </div>
 
 
@@ -364,80 +558,89 @@
 <script>
 
 
-// ======================================================
-// DETERMINE MODE
-// ======================================================
+// ============================================================
+// URL PARAMETERS
+// ============================================================
 
 const params =
-    new URLSearchParams(window.location.search);
+    new URLSearchParams(
+        window.location.search
+    );
+
 
 const mode =
     params.get("mode");
 
 
-// ======================================================
-// PHONE CONTROLLER MODE
-// ======================================================
+// ============================================================
+// PHONE CONTROLLER
+// ============================================================
 
 if (mode === "controller") {
 
-    /*
-     * Hide the actual game.
-     */
 
-    document.getElementById("gamePage").style.display =
-        "none";
+    // Hide laptop game
 
-    /*
-     * Show phone controller.
-     */
-
-    document.getElementById("controller").style.display =
-        "flex";
+    document.getElementById(
+        "gamePage"
+    ).style.display = "none";
 
 
-    // --------------------------------------------------
-    // Which player?
-    // --------------------------------------------------
+    // Show controller
+
+    document.getElementById(
+        "controller"
+    ).style.display = "flex";
+
+
+    // --------------------------------------------------------
+    // PLAYER
+    // --------------------------------------------------------
 
     let player =
         params.get("player");
 
+
     if (player !== "2") {
+
         player = "1";
+
     }
 
-    document.getElementById("phonePlayer").textContent =
-        "Player " + player;
+
+    document.getElementById(
+        "phonePlayer"
+    ).textContent = player;
 
 
-    // --------------------------------------------------
-    // WebSocket
-    // --------------------------------------------------
+    // --------------------------------------------------------
+    // PHONE WEBSOCKET
+    // --------------------------------------------------------
 
     const phoneStatus =
-        document.getElementById("phoneStatus");
+        document.getElementById(
+            "phoneStatus"
+        );
+
 
     let phoneSocket;
 
 
     function connectPhone() {
 
-        /*
-         * Connect to the same server that
-         * delivered this webpage.
-         */
 
         phoneSocket =
             new WebSocket(
+
                 `ws://${location.host}/ws/controller-${player}`
+
             );
 
 
         phoneSocket.onopen = function() {
 
             phoneStatus.textContent =
-                "🟢 Connected";
+                "🟢 CONNECTED";
 
         };
 
@@ -445,7 +648,7 @@ if (mode === "controller") {
         phoneSocket.onclose = function() {
 
             phoneStatus.textContent =
-                "🔴 Disconnected — reconnecting...";
+                "🔴 DISCONNECTED";
 
             setTimeout(
                 connectPhone,
@@ -467,16 +670,22 @@ if (mode === "controller") {
     connectPhone();
 
 
-    // --------------------------------------------------
+    // --------------------------------------------------------
     // SEND COMMAND
-    // --------------------------------------------------
+    // --------------------------------------------------------
 
     function sendCommand(action) {
 
+
         if (
+
             phoneSocket &&
-            phoneSocket.readyState === WebSocket.OPEN
+
+            phoneSocket.readyState ===
+            WebSocket.OPEN
+
         ) {
+
 
             phoneSocket.send(
 
@@ -495,20 +704,23 @@ if (mode === "controller") {
     }
 
 
-    // --------------------------------------------------
-    // BUTTON CONTROL
-    // --------------------------------------------------
+    // --------------------------------------------------------
+    // BUTTONS
+    // --------------------------------------------------------
 
     const upButton =
-        document.getElementById("upButton");
+        document.getElementById(
+            "upButton"
+        );
+
 
     const downButton =
-        document.getElementById("downButton");
+        document.getElementById(
+            "downButton"
+        );
 
 
-    /*
-     * UP
-     */
+    // UP
 
     upButton.addEventListener(
         "touchstart",
@@ -534,9 +746,7 @@ if (mode === "controller") {
     );
 
 
-    /*
-     * DOWN
-     */
+    // DOWN
 
     downButton.addEventListener(
         "touchstart",
@@ -562,16 +772,13 @@ if (mode === "controller") {
     );
 
 
-    /*
-     * Also support mouse.
-     * Useful when testing the controller
-     * on a laptop.
-     */
+    // Mouse support
 
     upButton.addEventListener(
         "mousedown",
         () => sendCommand("up")
     );
+
 
     upButton.addEventListener(
         "mouseup",
@@ -584,30 +791,26 @@ if (mode === "controller") {
         () => sendCommand("down")
     );
 
+
     downButton.addEventListener(
         "mouseup",
         () => sendCommand("stop")
     );
 
-
-
-    // ==================================================
-    // STOP EXECUTION HERE
-    // ==================================================
-
 }
 
 
-// ======================================================
-// NORMAL GAME MODE
-// ======================================================
+
+// ============================================================
+// LAPTOP GAME
+// ============================================================
 
 else {
 
 
-    // ==================================================
-    // SIDE SETUP
-    // ==================================================
+    // --------------------------------------------------------
+    // SIDE
+    // --------------------------------------------------------
 
     const side =
         params.get("side") === "right"
@@ -621,12 +824,14 @@ else {
             : 2;
 
 
-    // ==================================================
+    // --------------------------------------------------------
     // CANVAS
-    // ==================================================
+    // --------------------------------------------------------
 
     const canvas =
-        document.getElementById("gameCanvas");
+        document.getElementById(
+            "gameCanvas"
+        );
 
 
     const ctx =
@@ -634,9 +839,11 @@ else {
 
 
     canvas.classList.add(
+
         side === "left"
             ? "side-left"
             : "side-right"
+
     );
 
 
@@ -648,39 +855,22 @@ else {
         canvas.height;
 
 
-
-    // ==================================================
-    // TEXT
-    // ==================================================
+    // --------------------------------------------------------
+    // SIDE LABEL
+    // --------------------------------------------------------
 
     document.getElementById(
         "sideLabel"
     ).textContent =
 
         side === "left"
-            ? "(LEFT)"
-            : "(RIGHT)";
+            ? "PLAYER 1 • LEFT"
+            : "PLAYER 2 • RIGHT";
 
 
-    document.getElementById(
-        "instructions"
-    ).textContent =
-
-        `Player ${myPlayer}: ` +
-
-        (
-            myPlayer === 1
-                ? "W / S"
-                : "↑ / ↓"
-        ) +
-
-        " — Scan QR to control from phone";
-
-
-
-    // ==================================================
-    // GAME STATE
-    // ==================================================
+    // --------------------------------------------------------
+    // SERVER STATE
+    // --------------------------------------------------------
 
     let latest = null;
 
@@ -691,13 +881,14 @@ else {
             : WIDTH;
 
 
-
-    // ==================================================
+    // --------------------------------------------------------
     // WEBSOCKET
-    // ==================================================
+    // --------------------------------------------------------
 
     const statusEl =
-        document.getElementById("status");
+        document.getElementById(
+            "status"
+        );
 
 
     let ws;
@@ -705,16 +896,22 @@ else {
 
     function connect() {
 
+
         ws =
             new WebSocket(
+
                 `ws://${location.host}/ws/display-${side}`
+
             );
 
 
         ws.onopen = function() {
 
+
             statusEl.textContent =
-                `🟢 Connected — Player ${myPlayer}`;
+
+                `● ONLINE • PLAYER ${myPlayer}`;
+
 
             statusEl.className =
                 "connected";
@@ -724,11 +921,14 @@ else {
 
         ws.onclose = function() {
 
+
             statusEl.textContent =
-                "🔴 Disconnected — retrying...";
+                "● OFFLINE • RECONNECTING";
+
 
             statusEl.className =
                 "disconnected";
+
 
             setTimeout(
                 connect,
@@ -745,38 +945,46 @@ else {
         };
 
 
-        ws.onmessage = function(event) {
-
-            latest =
-                JSON.parse(event.data);
+        ws.onmessage =
+            function(event) {
 
 
-            if (
-                latest.court &&
-                latest.court.screen_width
-            ) {
-
-                xOffset =
-
-                    side === "left"
-                        ? 0
-                        : latest.court.screen_width;
-
-            }
+                latest =
+                    JSON.parse(
+                        event.data
+                    );
 
 
-            document.getElementById(
-                "score1"
-            ).textContent =
-                latest.score.p1;
+                if (
+
+                    latest.court &&
+
+                    latest.court.screen_width
+
+                ) {
 
 
-            document.getElementById(
-                "score2"
-            ).textContent =
-                latest.score.p2;
+                    xOffset =
 
-        };
+                        side === "left"
+                            ? 0
+                            : latest.court.screen_width;
+
+                }
+
+
+                document.getElementById(
+                    "score1"
+                ).textContent =
+                    latest.score.p1;
+
+
+                document.getElementById(
+                    "score2"
+                ).textContent =
+                    latest.score.p2;
+
+            };
 
     }
 
@@ -785,16 +993,22 @@ else {
 
 
 
-    // ==================================================
+    // --------------------------------------------------------
     // SEND KEYBOARD COMMAND
-    // ==================================================
+    // --------------------------------------------------------
 
     function send(action) {
 
+
         if (
+
             ws &&
-            ws.readyState === WebSocket.OPEN
+
+            ws.readyState ===
+            WebSocket.OPEN
+
         ) {
+
 
             ws.send(
 
@@ -814,9 +1028,9 @@ else {
 
 
 
-    // ==================================================
+    // --------------------------------------------------------
     // KEYBOARD
-    // ==================================================
+    // --------------------------------------------------------
 
     let keys = {};
 
@@ -843,10 +1057,13 @@ else {
 
     function pollKeys() {
 
+
         if (
+
             keys["w"] ||
             keys["W"] ||
             keys["ArrowUp"]
+
         ) {
 
             send("up");
@@ -855,9 +1072,11 @@ else {
 
 
         if (
+
             keys["s"] ||
             keys["S"] ||
             keys["ArrowDown"]
+
         ) {
 
             send("down");
@@ -868,40 +1087,44 @@ else {
 
 
     setInterval(
+
         pollKeys,
+
         1000 / 30
+
     );
 
 
 
-    // ==================================================
-    // DRAW GAME
-    // ==================================================
+    // ========================================================
+    // DRAW
+    // ========================================================
 
     function draw() {
 
-        /*
-         * Clear screen
-         */
 
-        ctx.fillStyle = "black";
+        // Clear
 
-        ctx.fillRect(
+        ctx.clearRect(
+
             0,
             0,
             WIDTH,
             HEIGHT
+
         );
 
 
         if (!latest) {
+
             return;
+
         }
 
 
-        // ------------------------------------------------
+        // ----------------------------------------------------
         // DATA
-        // ------------------------------------------------
+        // ----------------------------------------------------
 
         const paddleSize =
             latest.paddle_size;
@@ -919,73 +1142,20 @@ else {
             latest.ball;
 
 
-        ctx.fillStyle =
-            "white";
-
-
-        // ------------------------------------------------
-        // PLAYER 1 PADDLE
-        // ------------------------------------------------
-
-        ctx.fillRect(
-
-            p1.x - xOffset,
-
-            p1.y,
-
-            paddleSize.width,
-
-            paddleSize.height
-
-        );
-
-
-        // ------------------------------------------------
-        // PLAYER 2 PADDLE
-        // ------------------------------------------------
-
-        ctx.fillRect(
-
-            p2.x - xOffset,
-
-            p2.y,
-
-            paddleSize.width,
-
-            paddleSize.height
-
-        );
-
-
-        // ------------------------------------------------
-        // BALL
-        // ------------------------------------------------
-
-        ctx.fillRect(
-
-            ball.x - xOffset,
-
-            ball.y,
-
-            ball.size,
-
-            ball.size
-
-        );
-
-
-
-        // ------------------------------------------------
+        // ----------------------------------------------------
         // CENTER LINE
-        // ------------------------------------------------
+        // ----------------------------------------------------
 
         ctx.strokeStyle =
-            "#555";
+            "rgba(255,255,255,0.15)";
+
+
+        ctx.lineWidth = 2;
 
 
         ctx.setLineDash([
-            15,
-            15
+            12,
+            14
         ]);
 
 
@@ -1009,24 +1179,181 @@ else {
 
         ctx.setLineDash([]);
 
+
+
+        // ----------------------------------------------------
+        // PADDLES
+        // ----------------------------------------------------
+
+        ctx.fillStyle =
+            "white";
+
+
+        // Player 1
+
+        ctx.fillRect(
+
+            p1.x - xOffset,
+
+            p1.y,
+
+            paddleSize.width,
+
+            paddleSize.height
+
+        );
+
+
+        // Player 2
+
+        ctx.fillRect(
+
+            p2.x - xOffset,
+
+            p2.y,
+
+            paddleSize.width,
+
+            paddleSize.height
+
+        );
+
+
+
+        // ----------------------------------------------------
+        // BALL
+        // ----------------------------------------------------
+
+        ctx.beginPath();
+
+
+        ctx.arc(
+
+            ball.x - xOffset +
+                ball.size / 2,
+
+            ball.y +
+                ball.size / 2,
+
+            ball.size / 2,
+
+            0,
+
+            Math.PI * 2
+
+        );
+
+
+        ctx.fill();
+
+
+
+        // ----------------------------------------------------
+        // SMALL PLAYER LABEL
+        // ----------------------------------------------------
+
+        ctx.font =
+            "12px Arial";
+
+
+        ctx.fillStyle =
+            "rgba(255,255,255,0.3)";
+
+
+        ctx.textAlign =
+            "center";
+
+
+        ctx.fillText(
+
+            side === "left"
+                ? "PLAYER 1"
+                : "PLAYER 2",
+
+            WIDTH / 2,
+
+            HEIGHT - 20
+
+        );
+
     }
 
 
 
-    // ==================================================
+    // ========================================================
     // GAME LOOP
-    // ==================================================
+    // ========================================================
 
     function loop() {
 
+
         draw();
 
-        requestAnimationFrame(loop);
+
+        requestAnimationFrame(
+            loop
+        );
 
     }
 
 
     loop();
+
+
+    // ========================================================
+    // QR CODE
+    // ========================================================
+
+    /*
+     * IMPORTANT:
+     *
+     * location.hostname is used instead of localhost.
+     *
+     * This allows a phone on the same Wi-Fi network
+     * to connect to the laptop.
+     */
+
+    const controllerURL =
+
+        `${window.location.protocol}//` +
+
+        `${window.location.hostname}` +
+
+        `${window.location.port
+            ? ":" + window.location.port
+            : ""}` +
+
+        `/?mode=controller&player=${myPlayer}`;
+
+
+    new QRCode(
+
+        document.getElementById(
+            "qrcode"
+        ),
+
+        {
+
+            text: controllerURL,
+
+            width: 145,
+
+            height: 145,
+
+            correctLevel:
+                QRCode.CorrectLevel.H
+
+        }
+
+    );
+
+
+    // Show generated address
+
+    document.getElementById(
+        "qrText"
+    ).textContent =
+        controllerURL;
 
 }
 
